@@ -2,8 +2,13 @@
 name = "yatzy"
 version = "0.1.0"
 edition = "2021"
+authors = ["Peter Steneld"]
+description = "Utility to statistically learn best actions in the game of Yatzy"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 rand = "0.8.5"
+rayon = "1.7.0"
+clap = { version = "4", features = ["derive"] }
+num-format = "0.4.4"

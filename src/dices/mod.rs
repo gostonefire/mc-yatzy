@@ -1,6 +1,14 @@
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::ThreadRng;
 use rand::seq::SliceRandom;
+use crate::utils::base7_to_base10;
+
+pub enum Throw {
+    First,
+    Second,
+    #[allow(dead_code)]
+    Third,
+}
 
 pub struct Dices {
     rng: ThreadRng,
@@ -47,7 +55,7 @@ impl Dices {
         res
     }
 
-    pub fn select(&mut self, dices: Vec<u8>) -> Vec<u8> {
+    fn select(&mut self, dices: Vec<u8>) -> Vec<u8> {
         let n_holds = self.n_holds.sample(&mut self.rng);
 
         let mut selected: Vec<u8> = dices
@@ -57,5 +65,25 @@ impl Dices {
         selected.sort();
 
         selected
+    }
+
+    pub fn play_round(&mut self) -> (u16, u16, u8, u16, u16, u8, Vec<u8>) {
+        let throw1 = self.throw_and_hold(None);
+        let t1_code = base7_to_base10(&throw1);
+
+        let selected1 = self.select(throw1);
+        let s1_code = base7_to_base10(&selected1);
+        let s1_len = selected1.len() as u8;
+
+        let throw2 = self.throw_and_hold(Some(selected1));
+        let t2_code = base7_to_base10(&throw2);
+
+        let selected2 = self.select(throw2);
+        let s2_code = base7_to_base10(&selected2);
+        let s2_len = selected2.len() as u8;
+
+        let throw3 = self.throw_and_hold(Some(selected2));
+
+        (t1_code, s1_code, s1_len, t2_code, s2_code, s2_len, throw3)
     }
 }

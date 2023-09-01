@@ -1,81 +1,132 @@
-mod utils;
 mod dices;
+mod game_box;
+mod game_worker;
+mod hand_worker;
+mod score_box;
+mod utils;
+mod play_worker;
 
-use std::collections::HashMap;
-use utils::{base7_to_base10, print_result};
-use dices::Dices;
+use crate::game_worker::{learn_game, load_game, print_statistics};
+use crate::hand_worker::load_hands;
+use clap::{Parser, Subcommand};
+use hand_worker::learn_hands;
+use crate::play_worker::play_with_own_dices;
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    /// Path to directory holding models and exports
+    #[arg(short, long, value_name = "DIR")]
+    path: String,
 
-fn main() {
-    let mut dice = Dices::new();
-    let mut mc1: HashMap<(u16, u16), (f64, f64)> = HashMap::new();
-    let mut mc2: HashMap<(u16, u16), (f64, f64)> = HashMap::new();
-
-    for _ in 0..1000000 {
-        let (t1_code, s1_code, t2_code, s2_code, score) = play_round(&mut dice);
-
-        update_scores(&mut mc1, t1_code, s1_code, score);
-        update_scores(&mut mc2, t2_code, s2_code, score);
-    }
-
-    let res1 = optimal_holds(&mc1);
-    print_result(&res1);
-
-    let res2 = optimal_holds(&mc2);
-    print_result(&res2);
-
+    #[command(subcommand)]
+    command: Commands,
 }
 
-fn optimal_holds(mc: &HashMap<(u16,u16),(f64,f64)>) -> HashMap<u16, (u16, f64)> {
-    let mut res: HashMap<u16, (u16, f64)> = HashMap::new();
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Learn models Monte Carlo style
+    Learn {
+        /// Learn models for yatzy hands
+        #[arg(short, value_name="LAPS")]
+        scores: Option<i64>,
 
-    for ((throw, hold), (hits, value)) in mc.iter() {
-        match res.get(throw) {
-            Some((_, score)) => {
-                if *value / *hits > *score {
-                    res.insert(*throw, (*hold, *value / *hits));
-                }
-            }
-            None => {
-                res.insert(*throw, (*hold, *value / *hits));
-            }
-        }
-    }
-    res
+        /// Choose specific yatzy hand to learn, leave value empty for all
+        #[arg(short, value_name="HAND (zero based)")]
+        rule: Option<usize>,
+
+        /// Learn the game model
+        #[arg(short, value_name="LAPS")]
+        game: Option<i64>,
+
+        /// Export debug output from yatzy hands learning
+        #[arg(short)]
+        debug: bool,
+    },
+
+    /// Export models to readable format
+    Export {
+        /// Export score models for yatzy hands
+        #[arg(short, long)]
+        scores: bool,
+
+        /// Export the game model
+        #[arg(short, long)]
+        game: bool,
+    },
+
+    /// Print some statistics
+    Stats {
+        #[arg(short, long)]
+        mcgame: bool,
+    },
+
+    /// Run game of yatzy
+    Play,
 }
 
-fn update_scores(mc: &mut HashMap<(u16, u16), (f64, f64)>, t_code: u16, s_code: u16, score: f64) {
-    match mc.get(&(t_code, s_code)) {
-        Some((hits, value)) => {
-            mc.insert((t_code, s_code), (*hits + 1.0, *value + score));
-        }
-        None => {
-            mc.insert((t_code, s_code), (1.0, score));
+fn main() -> Result<(), String> {
+    let args = Cli::parse();
+
+    match args.command {
+        Commands::Learn {scores, rule, game, debug} => {
+            learn_models(&args.path, scores, rule, game, debug)?
+        },
+        Commands::Export {scores, game} => {
+            export_models(&args.path, scores, game)?;
+        },
+        Commands::Stats {mcgame} => {
+            print_models_statistics(&args.path, mcgame)?
+        },
+        Commands::Play {} => {
+            play_game(&args.path)?;
         }
     }
+
+    println!("Done!");
+    Ok(())
 }
 
-fn play_round(dice: &mut Dices) -> (u16, u16, u16, u16, f64) {
-    let throw1 = dice.throw_and_hold(None);
-    let t1_code = base7_to_base10(&throw1);
+fn learn_models(path: &str, scores: Option<i64>, rule: Option<usize>, game: Option<i64>, debug: bool) -> Result<(), String> {
+    if let Some(laps) = scores {
+        println!("Start learning rules");
+        learn_hands(laps, path, rule, debug)?;
+    }
 
-    let selected1 = dice.select(throw1);
-    let s1_code = base7_to_base10(&selected1);
+    if let Some(laps) = game {
+        println!("Start learning game");
+        learn_game(laps, path)?;
+    }
 
-    let throw2 = dice.throw_and_hold(Some(selected1));
-    let t2_code = base7_to_base10(&throw2);
+    Ok(())
+}
 
-    let selected2 = dice.select(throw2);
-    let s2_code = base7_to_base10(&selected2);
+fn print_models_statistics(path: &str, mcgame: bool) -> Result<(), String> {
+    if mcgame {
+        print_statistics(path)?
+    }
 
-    let throw3 = dice.throw_and_hold(Some(selected2));
+    Ok(())
+}
 
-    let score = throw3
-        .into_iter()
-        .filter(|x| *x == 6)
-        .collect::<Vec<u8>>()
-        .len()
-        * 6;
+fn export_models(path: &str, scores: bool, game: bool) -> Result<(), String> {
+    if scores {
+        println!("Start loading rules");
+        let hand_rules = load_hands(path)?;
+        println!("Start exporting rules");
+        hand_rules.iter().for_each(|h| h.export_optimal_holds(path).unwrap());
+    }
 
-    (t1_code, s1_code, t2_code, s2_code, score as f64)
+    if game {
+        println!("Start loading game");
+        let game_rules = load_game(path)?;
+        println!("Start exporting game");
+        game_rules.export_optimal_games(path)?;
+    }
+
+    Ok(())
+}
+
+fn play_game(path: &str) -> Result<(), String> {
+    play_with_own_dices(path)
 }
