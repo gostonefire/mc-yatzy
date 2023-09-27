@@ -1,12 +1,14 @@
+
 use crate::dices::{Dices, Throw};
 use crate::game_box::rules::GameRules;
 use crate::game_box::{IntermediateResult, MCGame, MCScore};
 use crate::hand_worker::load_hands;
-use crate::utils::{base10_to_base7, base7_to_base10};
+use crate::utils::{base10_to_base2, base10_to_base7, base7_to_base10};
 use num_format::{Locale, ToFormattedString};
 use rayon::spawn;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, Arc, Mutex, MutexGuard};
+use crate::score_box::rules::Hand;
 
 enum CollectorCmd {
     InitDone,
@@ -41,15 +43,18 @@ pub fn learn_game_sub_laps(laps: i64, path: &str) -> Result<GameRules, String> {
     let lock = Arc::new(Mutex::new(0u64));
     let lock0 = lock.clone();
     let lock1 = lock.clone();
+    let lock2 = lock.clone();
     let path_box: Arc<String> = Arc::new(path.to_string());
     let path_box0 = path_box.clone();
     let path_box1 = path_box.clone();
+    let path_box2 = path_box.clone();
     let (control_tx, control_rx): (Sender<CollectorCmd>, Receiver<CollectorCmd>) = mpsc::channel();
     let (data_tx0, data_rx): (
         Sender<Vec<IntermediateResult>>,
         Receiver<Vec<IntermediateResult>>,
     ) = mpsc::channel();
     let data_tx1 = data_tx0.clone();
+    let data_tx2 = data_tx0.clone();
 
     // Fire away the collector thread and wait for its initialization to be done
     spawn(move || mcscore_collector(path_box, data_rx, control_tx, lock));
@@ -61,6 +66,7 @@ pub fn learn_game_sub_laps(laps: i64, path: &str) -> Result<GameRules, String> {
     // Start worker threads, two should be just about right
     spawn(move || run_wrap(0, sub_laps, path_box0, data_tx0, lock0));
     spawn(move || run_wrap(1, sub_laps, path_box1, data_tx1, lock1));
+    spawn(move || run_wrap(2, sub_laps, path_box2, data_tx2, lock2));
 
     // Wait for collector thread to finish up its work then return game rules result
     return match control_rx.recv().unwrap() {
@@ -100,29 +106,30 @@ fn run(
     println!("Thread {} starting {} laps", part_no, laps);
     for _ in 0..laps {
         n_hands = mc.reset();
-        let mut results: Vec<IntermediateResult> = Vec::with_capacity(n_hands);
+        let mut results: Vec<IntermediateResult> = vec![IntermediateResult::new();n_hands];
         loop {
-            let mut ir = IntermediateResult::new();
-            if let Some(available_hands) = mc.available_hands() {
-                ir.available_hands = available_hands;
+            let available_hands = if let Some(ah) = mc.available_hands() {
+                ah
             } else {
                 break;
-            }
+            };
 
-            ir.t1_code = base7_to_base10(&dices.throw_and_hold(None));
-            ir.h1 = mc.propose_hand().expect("should always return Some in this context");
-            let (_, s1_code, _) = hands[ir.h1].optimal_holds(Throw::First)?.get(&ir.t1_code).unwrap();
+            let t1_code = base7_to_base10(&dices.throw_and_hold(None));
+            let h1 = best_available_hand(Throw::First, t1_code, available_hands, &hands)?;
+            let (_, s1_code, _) = hands[h1].optimal_holds(Throw::First)?.get(&t1_code).unwrap();
 
-            ir.t2_code = base7_to_base10(&dices.throw_and_hold(Some(base10_to_base7(*s1_code))));
-            ir.h2 = mc.propose_hand().expect("should always return Some in this context");
-            let (_, s2_code, _) = hands[ir.h2].optimal_holds(Throw::Second)?.get(&ir.t2_code).unwrap();
+            let t2_code = base7_to_base10(&dices.throw_and_hold(Some(base10_to_base7(*s1_code))));
+            let h2 = best_available_hand(Throw::Second, t2_code, available_hands, &hands)?;
+            let (_, s2_code, _) = hands[h2].optimal_holds(Throw::Second)?.get(&t2_code).unwrap();
 
-            ir.t3_code = base7_to_base10(&dices.throw_and_hold(Some(base10_to_base7(*s2_code))));
-            ir.h3 = mc.pick_hand().expect("should always return Some in this context");
+            let t3_code = base7_to_base10(&dices.throw_and_hold(Some(base10_to_base7(*s2_code))));
 
-            ir.score = hands[ir.h3].score(base10_to_base7(ir.t3_code));
+            let hand = mc.pick_hand().expect("should always return Some in this context");
+            let score = hands[hand].score(base10_to_base7(t3_code));
 
-            results.push(ir);
+            results[hand].available_hands = available_hands;
+            results[hand].thrown = t3_code;
+            results[hand].score = score;
         }
 
         // Check lock so collector can pause this thread if we are to far ahead
@@ -176,12 +183,14 @@ fn mcscore_collector(
                     None => {
                         let g = lock.lock().unwrap();
                         if *g > laps + 1_000_000 {
+                            println!("...collector lifting guard");
                             release_target = *g - 1000;
                             guard = Some(g);
                         }
                     }
                     Some(d) => {
                         if laps >= release_target {
+                            println!("...collector dropping guard");
                             drop(d);
                             guard = None;
                         } else {
@@ -216,6 +225,36 @@ fn mcscore_collector(
     }
 }
 
+fn best_available_hand(throw: Throw, thrown: u16, available_hands: u16, hands: &Vec<Box<Hand>>) -> Result<usize, String> {
+    let mut best_hand: Option<usize> = None;
+    let mut max_prob: f64 = 0.0;
+    let mut prob: f64;
+
+    match throw {
+        Throw::First => {
+            for hand in base10_to_base2(available_hands, false) {
+                prob = hands[hand as usize].max_score_probability(Throw::First, thrown)?;
+                if prob > max_prob {
+                    max_prob = prob;
+                    best_hand = Some(hand as usize);
+                }
+            }
+        },
+        Throw::Second => {
+            for hand in base10_to_base2(available_hands, false) {
+                prob = hands[hand as usize].max_score_probability(Throw::Second, thrown)?;
+                if prob > max_prob {
+                    max_prob = prob;
+                    best_hand = Some(hand as usize);
+                }
+            }
+        }
+        _ => return Err("Illegal throw at this point".to_string()),
+    }
+
+    if let Some(hand) = best_hand {Ok(hand)} else {Err("No best hand found".to_string())}
+}
+
 pub fn load_game(path: &str) -> Result<GameRules, String> {
     let mut games_rules = GameRules::new();
     games_rules.load_optimal_games(path)?;
@@ -234,9 +273,7 @@ pub fn print_statistics(path: &str) -> Result<(), String> {
     println!("...calculating statistics");
     let result = mc_score.statistics()?;
 
-    for (i, r) in result.iter().enumerate() {
-        println!("Throw no {}: {}\n", i + 1, r);
-    }
+    println!("{}\n", result);
 
     Ok(())
 }

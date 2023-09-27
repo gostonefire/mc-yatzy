@@ -5,7 +5,7 @@ use crate::dices::{Dices, Throw};
 use crate::game_box::rules::GameRules;
 use crate::game_worker::load_game;
 use crate::hand_worker::load_hands;
-use crate::score_box::Hands;
+use crate::score_box::rules::Hand;
 use crate::utils::{base10_to_base2, base10_to_base7, base7_to_base10, initcap};
 
 pub fn play_with_own_dices(path: &str) -> Result<(), String> {
@@ -44,39 +44,50 @@ pub fn play_with_own_dices(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn query_mc_input(available_hands: u16, game: &GameRules, hands: &Vec<Box<dyn Hands>>) -> Result<(Vec<u8>, u8), String> {
+fn query_mc_input(available_hands: u16, game: &GameRules, hands: &Vec<Box<Hand>>) -> Result<(Vec<u8>, u8), String> {
     let mut dices = Dices::new();
 
     let t1_code = base7_to_base10(&dices.throw_and_hold(None));
-    let h1 = game.propose_hand(Throw::First, t1_code, available_hands)?;
+    let h1 = game.propose_hand(t1_code, available_hands)?;
     let (_, s1_code, _) = hands[h1 as usize].optimal_holds(Throw::First)?.get(&t1_code).unwrap();
 
     let t2_code = base7_to_base10(&dices.throw_and_hold(Some(base10_to_base7(*s1_code))));
-    let h2 = game.propose_hand(Throw::Second, t2_code, available_hands)?;
+    let h2 = game.propose_hand(t2_code, available_hands)?;
     let (_, s2_code, _) = hands[h2 as usize].optimal_holds(Throw::Second)?.get(&t2_code).unwrap();
 
     let t3_code = base7_to_base10(&dices.throw_and_hold(Some(base10_to_base7(*s2_code))));
-    let h3 = game.propose_hand(Throw::Third, t3_code, available_hands)?;
+    let h3 = game.propose_hand(t3_code, available_hands)?;
 
     Ok((base10_to_base7(t3_code), h3))
 }
 
 fn query_human_input(available_hands: u16) -> (Vec<u8>, u8) {
-    let t1_vec = get_dices_input("First throw:", None, None);
-    println!("{:?}", t1_vec);
-    let h1_vec = get_dices_input("First hold:", Some(&t1_vec), None);
+    let throw = [
+        ("First throw:", "First hold:"),
+        ("Second throw:", "Second hold:"),
+        ("Third throw:", "")
+    ];
 
-    println!("\n{:?}", h1_vec);
-    let t2_vec = get_dices_input("Second throw:", None, Some(&h1_vec));
-    println!("{:?}", t2_vec);
-    let h2_vec = get_dices_input("Second hold:", Some(&t2_vec), None);
+    let mut t_vec: Vec<u8> = Vec::new();
+    let mut h_vec: Vec<u8> = Vec::new();
+    for (i, t) in throw.iter().enumerate() {
+        t_vec = get_dices_input(t.0, None, Some(&h_vec));
+        println!("Your dices: {:?}", t_vec);
 
-    println!("\n{:?}", h2_vec);
-    let t3_vec = get_dices_input("Third throw:", None, Some(&h2_vec));
-    println!("{:?}\n", t3_vec);
+        if i < 2 {
+            h_vec = get_dices_input(t.1, Some(&t_vec), None);
+            if h_vec.len() == 5 {
+                println!("\nYou stayed with dices: {:?}", h_vec);
+                break;
+            } else {
+                println!("\nYou are holding: {:?}", h_vec);
+            }
+        }
+    }
+    println!();
 
     let hand = get_hand_choice(base10_to_base2(available_hands, true));
-    (t3_vec, hand)
+    (t_vec, hand)
 }
 
 fn check_hold(dices: &Vec<u8>, hold: &Vec<u8>) -> bool {

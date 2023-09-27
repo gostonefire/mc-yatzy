@@ -1,873 +1,469 @@
-use crate::score_box::{Hands, OptimalHolds, Throw};
+use crate::score_box::{OptimalHolds, Throw};
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufReader, BufWriter, Read, Write};
+use crate::dices::Throw::{First, Second};
+use crate::utils::{base10_to_base7, records_in_file, write_records_header};
 
-pub struct Ones {
+pub struct Hand {
     optimal_holds: OptimalHolds,
-    min_holds: u8,
-    name: String,
-    id: usize,
+    hand: HandType,
 }
 
-impl Ones {
-    pub fn new() -> Ones {
-        Ones {
+impl Hand {
+    pub fn new(hand: HandType) -> Hand {
+        Hand {
             optimal_holds: OptimalHolds::new(),
-            min_holds: 5,
-            name: "ones".to_string(),
-            id: 0,
+            hand,
         }
     }
-}
-
-impl Hands for Ones {
-    fn name(&self) -> String {
-        self.name.clone()
+    pub fn name(&self) -> String {
+        self.hand.name().clone()
     }
 
-    fn id(&self) -> usize {
-        self.id
+    pub fn id(&self) -> usize {
+        self.hand.id()
     }
 
-    fn min_holds(&self) -> u8 {
-        self.min_holds
+    pub fn min_holds(&self) -> u8 {
+        self.hand.min_holds()
     }
 
-    fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
+    pub fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
         [&mut self.optimal_holds.first, &mut self.optimal_holds.second]
     }
 
-    fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
+    pub fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
         match throw {
-            Throw::First => Ok(&self.optimal_holds.first),
-            Throw::Second => Ok(&self.optimal_holds.second),
+            First => Ok(&self.optimal_holds.first),
+            Second => Ok(&self.optimal_holds.second),
             _ => Err("Illegal throw".to_string()),
         }
     }
 
-    fn score(&self, dices: Vec<u8>) -> f64 {
-        let score = dices
-            .into_iter()
-            .filter(|x| *x == 1)
-            .collect::<Vec<u8>>()
-            .len()
-            * 1;
-
-        score as f64
-    }
-}
-
-pub struct Twos {
-    optimal_holds: OptimalHolds,
-    min_holds: u8,
-    name: String,
-    id: usize,
-}
-
-impl Twos {
-    pub fn new() -> Twos {
-        Twos {
-            optimal_holds: OptimalHolds::new(),
-            min_holds: 5,
-            name: "twos".to_string(),
-            id: 1,
-        }
-    }
-}
-
-impl Hands for Twos {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn id(&self) -> usize {
-        self.id
-    }
-
-    fn min_holds(&self) -> u8 {
-        self.min_holds
-    }
-
-    fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
-        [&mut self.optimal_holds.first, &mut self.optimal_holds.second]
-    }
-
-    fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
-        match throw {
-            Throw::First => Ok(&self.optimal_holds.first),
-            Throw::Second => Ok(&self.optimal_holds.second),
-            _ => Err("Illegal throw".to_string()),
-        }
-    }
-
-    fn score(&self, dices: Vec<u8>) -> f64 {
-        let score = dices
-            .into_iter()
-            .filter(|x| *x == 2)
-            .collect::<Vec<u8>>()
-            .len()
-            * 2;
-
-        score as f64
-    }
-}
-
-pub struct Threes {
-    optimal_holds: OptimalHolds,
-    min_holds: u8,
-    name: String,
-    id: usize,
-}
-
-impl Threes {
-    pub fn new() -> Threes {
-        Threes {
-            optimal_holds: OptimalHolds::new(),
-            min_holds: 5,
-            name: "threes".to_string(),
-            id: 2,
-        }
-    }
-}
-
-impl Hands for Threes {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn id(&self) -> usize {
-        self.id
-    }
-
-    fn min_holds(&self) -> u8 {
-        self.min_holds
-    }
-
-    fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
-        [&mut self.optimal_holds.first, &mut self.optimal_holds.second]
-    }
-
-    fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
-        match throw {
-            Throw::First => Ok(&self.optimal_holds.first),
-            Throw::Second => Ok(&self.optimal_holds.second),
-            _ => Err("Illegal throw".to_string()),
-        }
-    }
-
-    fn score(&self, dices: Vec<u8>) -> f64 {
-        let score = dices
-            .into_iter()
-            .filter(|x| *x == 3)
-            .collect::<Vec<u8>>()
-            .len()
-            * 3;
-
-        score as f64
-    }
-}
-
-pub struct Fours {
-    optimal_holds: OptimalHolds,
-    min_holds: u8,
-    name: String,
-    id: usize,
-}
-
-impl Fours {
-    pub fn new() -> Fours {
-        Fours {
-            optimal_holds: OptimalHolds::new(),
-            min_holds: 5,
-            name: "fours".to_string(),
-            id: 3,
-        }
-    }
-}
-
-impl Hands for Fours {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn id(&self) -> usize {
-        self.id
-    }
-
-    fn min_holds(&self) -> u8 {
-        self.min_holds
-    }
-
-    fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
-        [&mut self.optimal_holds.first, &mut self.optimal_holds.second]
-    }
-
-    fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
-        match throw {
-            Throw::First => Ok(&self.optimal_holds.first),
-            Throw::Second => Ok(&self.optimal_holds.second),
-            _ => Err("Illegal throw".to_string()),
-        }
-    }
-
-    fn score(&self, dices: Vec<u8>) -> f64 {
-        let score = dices
-            .into_iter()
-            .filter(|x| *x == 4)
-            .collect::<Vec<u8>>()
-            .len()
-            * 4;
-
-        score as f64
-    }
-}
-
-pub struct Fives {
-    optimal_holds: OptimalHolds,
-    min_holds: u8,
-    name: String,
-    id: usize,
-}
-
-impl Fives {
-    pub fn new() -> Fives {
-        Fives {
-            optimal_holds: OptimalHolds::new(),
-            min_holds: 5,
-            name: "fives".to_string(),
-            id: 4,
-        }
-    }
-}
-
-impl Hands for Fives {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn id(&self) -> usize {
-        self.id
-    }
-
-    fn min_holds(&self) -> u8 {
-        self.min_holds
-    }
-
-    fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
-        [&mut self.optimal_holds.first, &mut self.optimal_holds.second]
-    }
-
-    fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
-        match throw {
-            Throw::First => Ok(&self.optimal_holds.first),
-            Throw::Second => Ok(&self.optimal_holds.second),
-            _ => Err("Illegal throw".to_string()),
-        }
-    }
-
-    fn score(&self, dices: Vec<u8>) -> f64 {
-        let score = dices
-            .into_iter()
-            .filter(|x| *x == 5)
-            .collect::<Vec<u8>>()
-            .len()
-            * 5;
-
-        score as f64
-    }
-}
-
-pub struct Sixes {
-    optimal_holds: OptimalHolds,
-    min_holds: u8,
-    name: String,
-    id: usize,
-}
-
-impl Sixes {
-    pub fn new() -> Sixes {
-        Sixes {
-            optimal_holds: OptimalHolds::new(),
-            min_holds: 5,
-            name: "sixes".to_string(),
-            id: 5,
-        }
-    }
-}
-
-impl Hands for Sixes {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn id(&self) -> usize {
-        self.id
-    }
-
-    fn min_holds(&self) -> u8 {
-        self.min_holds
-    }
-
-    fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
-        [&mut self.optimal_holds.first, &mut self.optimal_holds.second]
-    }
-
-    fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
-        match throw {
-            Throw::First => Ok(&self.optimal_holds.first),
-            Throw::Second => Ok(&self.optimal_holds.second),
-            _ => Err("Illegal throw".to_string()),
-        }
-    }
-
-    fn score(&self, dices: Vec<u8>) -> f64 {
-        let score = dices
-            .into_iter()
-            .filter(|x| *x == 6)
-            .collect::<Vec<u8>>()
-            .len()
-            * 6;
-
-        score as f64
-    }
-}
-
-pub struct OnePair {
-    optimal_holds: OptimalHolds,
-    min_holds: u8,
-    name: String,
-    id: usize,
-}
-
-impl OnePair {
-    pub fn new() -> OnePair {
-        OnePair {
-            optimal_holds: OptimalHolds::new(),
-            min_holds: 2,
-            name: "one_pair".to_string(),
-            id: 6,
-        }
-    }
-}
-
-impl Hands for OnePair {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn id(&self) -> usize {
-        self.id
-    }
-
-    fn min_holds(&self) -> u8 {
-        self.min_holds
-    }
-
-    fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
-        [&mut self.optimal_holds.first, &mut self.optimal_holds.second]
-    }
-
-    fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
-        match throw {
-            Throw::First => Ok(&self.optimal_holds.first),
-            Throw::Second => Ok(&self.optimal_holds.second),
-            _ => Err("Illegal throw".to_string()),
-        }
-    }
-
-    fn score(&self, dices: Vec<u8>) -> f64 {
-        let mut groups: [u8; 6] = [0; 6];
-        for dice in dices {
-            groups[dice as usize - 1] += 1;
-        }
-
-        let mut pair: u8 = 0;
-        for dice in (1..7).rev() {
-            if groups[dice - 1] > 1 {
-                pair = dice as u8;
-                break;
-            }
-        }
-
-        (pair * 2) as f64
-    }
-}
-
-pub struct TwoPairs {
-    optimal_holds: OptimalHolds,
-    min_holds: u8,
-    name: String,
-    id: usize,
-}
-
-impl TwoPairs {
-    pub fn new() -> TwoPairs {
-        TwoPairs {
-            optimal_holds: OptimalHolds::new(),
-            min_holds: 4,
-            name: "two_pairs".to_string(),
-            id: 7,
-        }
-    }
-}
-
-impl Hands for TwoPairs {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn id(&self) -> usize {
-        self.id
-    }
-
-    fn min_holds(&self) -> u8 {
-        self.min_holds
-    }
-
-    fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
-        [&mut self.optimal_holds.first, &mut self.optimal_holds.second]
-    }
-
-    fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
-        match throw {
-            Throw::First => Ok(&self.optimal_holds.first),
-            Throw::Second => Ok(&self.optimal_holds.second),
-            _ => Err("Illegal throw".to_string()),
-        }
-    }
-
-    fn score(&self, dices: Vec<u8>) -> f64 {
-        let mut groups: [u8; 6] = [0; 6];
-        for dice in dices {
-            groups[dice as usize - 1] += 1;
-        }
-
-        let mut pairs: [u8; 2] = [0; 2];
-        let mut pair: usize = 0;
-        for dice in (1..7).rev() {
-            if groups[dice - 1] > 1 {
-                pairs[pair] = dice as u8;
-                pair += 1;
-            }
-            if pair > 1 {
-                break;
-            }
-        }
-
-        let res = if pair < 2 {
-            0
+    pub fn max_score_probability(&self, throw: Throw, thrown: u16) -> Result<f64, String> {
+        if let Some((_, _, score)) = self.optimal_holds(throw)?
+            .get(&thrown) {
+            Ok(*score / self.hand.max_score() as f64)
         } else {
-            pairs[0] * 2 + pairs[1] * 2
+            Err(format!("Optimal holds for hand {} empty or not complete", self.hand.name()))
+        }
+    }
+
+    pub fn score(&self, dices: Vec<u8>) -> f64 {
+        self.hand.score(dices)
+    }
+
+    pub fn load_optimal_holds(&mut self, path: &str) -> Result<(), String> {
+        let name = self.name();
+        let opt_arr = self.optimal_holds_mut();
+
+        let path_name = &format!("{}/{}.bin", path, name);
+        let mut buf_reader = match File::open(path_name) {
+            Ok(f) => BufReader::new(f),
+            Err(e) => return Err(format!("Error while open file {}: {}", path_name, e)),
         };
 
-        res as f64
-    }
-}
+        let mut buf = [0u8; 14];
+        let mut n_records = records_in_file(&mut buf_reader, path_name)?;
 
-pub struct ThreeOfAKind {
-    optimal_holds: OptimalHolds,
-    min_holds: u8,
-    name: String,
-    id: usize,
-}
+        while n_records > 0 {
+            match buf_reader.read_exact(&mut buf) {
+                Ok(()) => {
+                    let throw = buf[0] as usize;
+                    let hold_len = buf[1];
+                    let thrown = u16::from_le_bytes(buf[2..4].try_into().unwrap());
+                    let hold = u16::from_le_bytes(buf[4..6].try_into().unwrap());
+                    let score = f64::from_le_bytes(buf[6..14].try_into().unwrap());
 
-impl ThreeOfAKind {
-    pub fn new() -> ThreeOfAKind {
-        ThreeOfAKind {
-            optimal_holds: OptimalHolds::new(),
-            min_holds: 3,
-            name: "three_of_a_kind".to_string(),
-            id: 8,
-        }
-    }
-}
-
-impl Hands for ThreeOfAKind {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn id(&self) -> usize {
-        self.id
-    }
-
-    fn min_holds(&self) -> u8 {
-        self.min_holds
-    }
-
-    fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
-        [&mut self.optimal_holds.first, &mut self.optimal_holds.second]
-    }
-
-    fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
-        match throw {
-            Throw::First => Ok(&self.optimal_holds.first),
-            Throw::Second => Ok(&self.optimal_holds.second),
-            _ => Err("Illegal throw".to_string()),
-        }
-    }
-
-    fn score(&self, dices: Vec<u8>) -> f64 {
-        let mut groups: [u8; 6] = [0; 6];
-        for dice in dices {
-            groups[dice as usize - 1] += 1;
-        }
-
-        let mut triple: u8 = 0;
-        for dice in (1..7).rev() {
-            if groups[dice - 1] > 2 {
-                triple = dice as u8;
-                break;
+                    opt_arr[throw].insert(thrown, (hold_len, hold, score));
+                }
+                Err(e) => {
+                    return Err(format!(
+                        "Error while reading from file {}: {}",
+                        path_name, e
+                    ));
+                }
             }
+            n_records -= 1;
         }
-
-        (triple * 3) as f64
-    }
-}
-
-pub struct FourOfAKind {
-    optimal_holds: OptimalHolds,
-    min_holds: u8,
-    name: String,
-    id: usize,
-}
-
-impl FourOfAKind {
-    pub fn new() -> FourOfAKind {
-        FourOfAKind {
-            optimal_holds: OptimalHolds::new(),
-            min_holds: 4,
-            name: "four_of_a_kind".to_string(),
-            id: 9,
-        }
-    }
-}
-
-impl Hands for FourOfAKind {
-    fn name(&self) -> String {
-        self.name.clone()
+        Ok(())
     }
 
-    fn id(&self) -> usize {
-        self.id
-    }
+    pub fn save_optimal_holds(&self, path: &str) -> Result<(), String> {
+        let opt_vec = vec![self.optimal_holds(First)?, self.optimal_holds(Second)?];
 
-    fn min_holds(&self) -> u8 {
-        self.min_holds
-    }
-
-    fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
-        [&mut self.optimal_holds.first, &mut self.optimal_holds.second]
-    }
-
-    fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
-        match throw {
-            Throw::First => Ok(&self.optimal_holds.first),
-            Throw::Second => Ok(&self.optimal_holds.second),
-            _ => Err("Illegal throw".to_string()),
-        }
-    }
-
-    fn score(&self, dices: Vec<u8>) -> f64 {
-        let mut groups: [u8; 6] = [0; 6];
-        for dice in dices {
-            groups[dice as usize - 1] += 1;
-        }
-
-        let mut quad: u8 = 0;
-        for dice in (1..7).rev() {
-            if groups[dice - 1] > 3 {
-                quad = dice as u8;
-                break;
-            }
-        }
-
-        (quad * 4) as f64
-    }
-}
-
-pub struct SmallStraight {
-    optimal_holds: OptimalHolds,
-    min_holds: u8,
-    name: String,
-    id: usize,
-}
-
-impl SmallStraight {
-    pub fn new() -> SmallStraight {
-        SmallStraight {
-            optimal_holds: OptimalHolds::new(),
-            min_holds: 5,
-            name: "small_straight".to_string(),
-            id: 10,
-        }
-    }
-}
-
-impl Hands for SmallStraight {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn id(&self) -> usize {
-        self.id
-    }
-
-    fn min_holds(&self) -> u8 {
-        self.min_holds
-    }
-
-    fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
-        [&mut self.optimal_holds.first, &mut self.optimal_holds.second]
-    }
-
-    fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
-        match throw {
-            Throw::First => Ok(&self.optimal_holds.first),
-            Throw::Second => Ok(&self.optimal_holds.second),
-            _ => Err("Illegal throw".to_string()),
-        }
-    }
-
-    fn score(&self, dices: Vec<u8>) -> f64 {
-        let score: f64 = match dices.as_slice() {
-            [1, 2, 3, 4, 5] => 15.0,
-            _ => 0.0,
+        let path_name = &format!("{}/{}.bin", path, self.name());
+        let mut buf_writer = match File::create(path_name) {
+            Ok(f) => BufWriter::new(f),
+            Err(e) => return Err(format!("Error while open/create file {}: {}", path_name, e)),
         };
 
-        score
-    }
-}
+        let _ = write_records_header(&mut buf_writer, &opt_vec, path_name)?;
 
-pub struct LargeStraight {
-    optimal_holds: OptimalHolds,
-    min_holds: u8,
-    name: String,
-    id: usize,
-}
+        let mut buf = [0u8; 14];
+        let mut offset: usize;
+        for throw in 0..opt_vec.len() {
+            for (thrown, (hold_len, hold, score)) in opt_vec[throw] {
+                offset = 2;
+                buf[0] = throw as u8;
+                buf[1] = *hold_len;
+                (*thrown).to_le_bytes().iter().for_each(|v| {
+                    buf[offset] = *v;
+                    offset += 1;
+                });
+                (*hold).to_le_bytes().iter().for_each(|v| {
+                    buf[offset] = *v;
+                    offset += 1;
+                });
+                (*score).to_le_bytes().iter().for_each(|v| {
+                    buf[offset] = *v;
+                    offset += 1;
+                });
 
-impl LargeStraight {
-    pub fn new() -> LargeStraight {
-        LargeStraight {
-            optimal_holds: OptimalHolds::new(),
-            min_holds: 5,
-            name: "large_straight".to_string(),
-            id: 11,
+                if let Err(e) = buf_writer.write_all(&buf) {
+                    return Err(format!("Error while writing to file {}: {}", path_name, e));
+                }
+            }
         }
-    }
-}
-
-impl Hands for LargeStraight {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn id(&self) -> usize {
-        self.id
-    }
-
-    fn min_holds(&self) -> u8 {
-        self.min_holds
-    }
-
-    fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
-        [&mut self.optimal_holds.first, &mut self.optimal_holds.second]
-    }
-
-    fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
-        match throw {
-            Throw::First => Ok(&self.optimal_holds.first),
-            Throw::Second => Ok(&self.optimal_holds.second),
-            _ => Err("Illegal throw".to_string()),
+        if let Err(e) = buf_writer.flush() {
+            return Err(format!("Error while writing to file {}: {}", path_name, e));
         }
+        Ok(())
     }
 
-    fn score(&self, dices: Vec<u8>) -> f64 {
-        let score: f64 = match dices.as_slice() {
-            [2, 3, 4, 5, 6] => 20.0,
-            _ => 0.0,
+    pub fn export_optimal_holds(&self, path: &str) -> Result<(), String> {
+        let opt_arr = [self.optimal_holds(First)?, self.optimal_holds(Second)?];
+
+        let path_name = &format!("{}/export.{}.txt", path, self.name());
+        let mut buf_writer = match File::create(path_name) {
+            Ok(f) => BufWriter::new(f),
+            Err(e) => return Err(format!("Error while open/create file {}: {}", path_name, e)),
         };
 
-        score
+        for throw in 0..opt_arr.len() {
+            let mut keys: Vec<u16> = opt_arr[throw].keys().map(|k| *k).collect();
+            keys.sort();
+
+            for thrown in keys {
+                let (_, hold, score) = opt_arr[throw].get(&thrown).unwrap();
+                let tv = base10_to_base7(thrown);
+                let hv = base10_to_base7(*hold);
+
+                let row = format!(
+                    "{}: {:?} -> {:15} -> {}\n",
+                    throw + 1,
+                    tv,
+                    format!("{:?}", hv),
+                    *score
+                );
+                if let Err(e) = buf_writer.write_all(row.as_bytes()) {
+                    return Err(format!("Error while writing to file {}: {}", path_name, e));
+                }
+            }
+        }
+        if let Err(e) = buf_writer.flush() {
+            return Err(format!("Error while writing to file {}: {}", path_name, e));
+        }
+        Ok(())
     }
+
 }
 
-pub struct FullHouse {
-    optimal_holds: OptimalHolds,
-    min_holds: u8,
-    name: String,
-    id: usize,
+pub enum HandType {
+    Ones,
+    Twos,
+    Threes,
+    Fours,
+    Fives,
+    Sixes,
+    OnePair,
+    TwoPairs,
+    ThreeOfAKind,
+    FourOfAKind,
+    SmallStraight,
+    LargeStraight,
+    FullHouse,
+    Chance,
+    Yatzy,
 }
 
-impl FullHouse {
-    pub fn new() -> FullHouse {
-        FullHouse {
-            optimal_holds: OptimalHolds::new(),
-            min_holds: 5,
-            name: "full_house".to_string(),
-            id: 12,
+impl HandType {
+    fn name(&self) -> String {
+        match self {
+            HandType::Ones => String::from("ones"),
+            HandType::Twos => String::from("twos"),
+            HandType::Threes => String::from("threes"),
+            HandType::Fours => String::from("fours"),
+            HandType::Fives => String::from("fives"),
+            HandType::Sixes => String::from("sixes"),
+            HandType::OnePair => String::from("one_pair"),
+            HandType::TwoPairs => String::from("two_pairs"),
+            HandType::ThreeOfAKind => String::from("three_of_a_kind"),
+            HandType::FourOfAKind => String::from("four_of_a_kind"),
+            HandType::SmallStraight => String::from("small_straight"),
+            HandType::LargeStraight => String::from("large_straight"),
+            HandType::FullHouse => String::from("full_house"),
+            HandType::Chance => String::from("chance"),
+            HandType::Yatzy => String::from("yatzy"),
         }
     }
-}
-
-impl Hands for FullHouse {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
     fn id(&self) -> usize {
-        self.id
+        match self {
+            HandType::Ones => 0,
+            HandType::Twos => 1,
+            HandType::Threes => 2,
+            HandType::Fours => 3,
+            HandType::Fives => 4,
+            HandType::Sixes => 5,
+            HandType::OnePair => 6,
+            HandType::TwoPairs => 7,
+            HandType::ThreeOfAKind => 8,
+            HandType::FourOfAKind => 9,
+            HandType::SmallStraight => 10,
+            HandType::LargeStraight => 11,
+            HandType::FullHouse => 12,
+            HandType::Chance => 13,
+            HandType::Yatzy => 14,
+        }
+    }
+    fn max_score(&self) -> u8 {
+        match self {
+            HandType::Ones => 5,
+            HandType::Twos => 10,
+            HandType::Threes => 15,
+            HandType::Fours => 20,
+            HandType::Fives => 25,
+            HandType::Sixes => 30,
+            HandType::OnePair => 12,
+            HandType::TwoPairs => 22,
+            HandType::ThreeOfAKind => 18,
+            HandType::FourOfAKind => 24,
+            HandType::SmallStraight => 15,
+            HandType::LargeStraight => 20,
+            HandType::FullHouse => 28,
+            HandType::Chance => 30,
+            HandType::Yatzy => 50,
+        }
     }
 
     fn min_holds(&self) -> u8 {
-        self.min_holds
-    }
-
-    fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
-        [&mut self.optimal_holds.first, &mut self.optimal_holds.second]
-    }
-
-    fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
-        match throw {
-            Throw::First => Ok(&self.optimal_holds.first),
-            Throw::Second => Ok(&self.optimal_holds.second),
-            _ => Err("Illegal throw".to_string()),
+        match self {
+            HandType::Ones => 5,
+            HandType::Twos => 5,
+            HandType::Threes => 5,
+            HandType::Fours => 5,
+            HandType::Fives => 5,
+            HandType::Sixes => 5,
+            HandType::OnePair => 2,
+            HandType::TwoPairs => 4,
+            HandType::ThreeOfAKind => 3,
+            HandType::FourOfAKind => 4,
+            HandType::SmallStraight => 5,
+            HandType::LargeStraight => 5,
+            HandType::FullHouse => 5,
+            HandType::Chance => 5,
+            HandType::Yatzy => 5,
         }
     }
-
     fn score(&self, dices: Vec<u8>) -> f64 {
-        let mut groups: [u8; 6] = [0; 6];
-        for dice in dices {
-            groups[dice as usize - 1] += 1;
+        match self {
+            Self::Ones=> {
+                let score = dices
+                    .into_iter()
+                    .filter(|x| *x == 1)
+                    .collect::<Vec<u8>>()
+                    .len()
+                    * 1;
+
+                score as f64
+            },
+            Self::Twos=> {
+                let score = dices
+                    .into_iter()
+                    .filter(|x| *x == 2)
+                    .collect::<Vec<u8>>()
+                    .len()
+                    * 2;
+
+                score as f64
+            },
+            Self::Threes=> {
+                let score = dices
+                    .into_iter()
+                    .filter(|x| *x == 3)
+                    .collect::<Vec<u8>>()
+                    .len()
+                    * 3;
+
+                score as f64
+            },
+            Self::Fours=> {
+                let score = dices
+                    .into_iter()
+                    .filter(|x| *x == 4)
+                    .collect::<Vec<u8>>()
+                    .len()
+                    * 4;
+
+                score as f64
+            },
+            Self::Fives=> {
+                let score = dices
+                    .into_iter()
+                    .filter(|x| *x == 5)
+                    .collect::<Vec<u8>>()
+                    .len()
+                    * 5;
+
+                score as f64
+            },
+            Self::Sixes=> {
+                let score = dices
+                    .into_iter()
+                    .filter(|x| *x == 6)
+                    .collect::<Vec<u8>>()
+                    .len()
+                    * 6;
+
+                score as f64
+            },
+            Self::OnePair=> {
+                let mut groups: [u8; 6] = [0; 6];
+                for dice in dices {
+                    groups[dice as usize - 1] += 1;
+                }
+
+                let mut pair: u8 = 0;
+                for dice in (1..7).rev() {
+                    if groups[dice - 1] > 1 {
+                        pair = dice as u8;
+                        break;
+                    }
+                }
+
+                (pair * 2) as f64
+            },
+            Self::TwoPairs=> {
+                let mut groups: [u8; 6] = [0; 6];
+                for dice in dices {
+                    groups[dice as usize - 1] += 1;
+                }
+
+                let mut pairs: [u8; 2] = [0; 2];
+                let mut pair: usize = 0;
+                for dice in (1..7).rev() {
+                    if groups[dice - 1] > 1 {
+                        pairs[pair] = dice as u8;
+                        pair += 1;
+                    }
+                    if pair > 1 {
+                        break;
+                    }
+                }
+
+                let res = if pair < 2 {
+                    0
+                } else {
+                    pairs[0] * 2 + pairs[1] * 2
+                };
+
+                res as f64
+            },
+            Self::ThreeOfAKind=> {
+                let mut groups: [u8; 6] = [0; 6];
+                for dice in dices {
+                    groups[dice as usize - 1] += 1;
+                }
+
+                let mut triple: u8 = 0;
+                for dice in (1..7).rev() {
+                    if groups[dice - 1] > 2 {
+                        triple = dice as u8;
+                        break;
+                    }
+                }
+
+                (triple * 3) as f64
+            },
+            Self::FourOfAKind=> {
+                let mut groups: [u8; 6] = [0; 6];
+                for dice in dices {
+                    groups[dice as usize - 1] += 1;
+                }
+
+                let mut quad: u8 = 0;
+                for dice in (1..7).rev() {
+                    if groups[dice - 1] > 3 {
+                        quad = dice as u8;
+                        break;
+                    }
+                }
+
+                (quad * 4) as f64
+            },
+            Self::SmallStraight=> {
+                let score: f64 = match dices.as_slice() {
+                    [1, 2, 3, 4, 5] => 15.0,
+                    _ => 0.0,
+                };
+
+                score
+            },
+            Self::LargeStraight=> {
+                let score: f64 = match dices.as_slice() {
+                    [2, 3, 4, 5, 6] => 20.0,
+                    _ => 0.0,
+                };
+
+                score
+            },
+            Self::FullHouse=> {
+                let mut groups: [u8; 6] = [0; 6];
+                for dice in dices {
+                    groups[dice as usize - 1] += 1;
+                }
+
+                let mut triple: u8 = 0;
+                let mut pair: u8 = 0;
+                for dice in (1..7).rev() {
+                    if groups[dice - 1] > 2 {
+                        triple = dice as u8;
+                    } else if groups[dice - 1] > 1 {
+                        pair = dice as u8;
+                    }
+                    if triple > 0 && pair > 0 {
+                        break;
+                    }
+                }
+
+                let res = if triple > 0 && pair > 0 {
+                    triple * 3 + pair * 2
+                } else {
+                    0
+                };
+
+                res as f64
+            },
+            Self::Chance=> {
+                let score: u8 = dices.iter().sum();
+
+                score as f64
+            },
+            Self::Yatzy=> {
+                let mut groups: [u8; 6] = [0; 6];
+                for dice in dices {
+                    groups[dice as usize - 1] += 1;
+                }
+
+                for dice in (1..7).rev() {
+                    if groups[dice - 1] > 4 {
+                        return 50.0;
+                    }
+                }
+
+                0.0
+            },
         }
-
-        let mut triple: u8 = 0;
-        let mut pair: u8 = 0;
-        for dice in (1..7).rev() {
-            if groups[dice - 1] > 2 {
-                triple = dice as u8;
-            } else if groups[dice - 1] > 1 {
-                pair = dice as u8;
-            }
-            if triple > 0 && pair > 0 {
-                break;
-            }
-        }
-
-        let res = if triple > 0 && pair > 0 {
-            triple * 3 + pair * 2
-        } else {
-            0
-        };
-
-        res as f64
-    }
-}
-
-pub struct Chance {
-    optimal_holds: OptimalHolds,
-    min_holds: u8,
-    name: String,
-    id: usize,
-}
-
-impl Chance {
-    pub fn new() -> Chance {
-        Chance {
-            optimal_holds: OptimalHolds::new(),
-            min_holds: 5,
-            name: "chance".to_string(),
-            id: 13,
-        }
-    }
-}
-
-impl Hands for Chance {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn id(&self) -> usize {
-        self.id
-    }
-
-    fn min_holds(&self) -> u8 {
-        self.min_holds
-    }
-
-    fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
-        [&mut self.optimal_holds.first, &mut self.optimal_holds.second]
-    }
-
-    fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
-        match throw {
-            Throw::First => Ok(&self.optimal_holds.first),
-            Throw::Second => Ok(&self.optimal_holds.second),
-            _ => Err("Illegal throw".to_string()),
-        }
-    }
-
-    fn score(&self, dices: Vec<u8>) -> f64 {
-        let score: u8 = dices.iter().sum();
-
-        score as f64
-    }
-}
-
-pub struct Yatzy {
-    optimal_holds: OptimalHolds,
-    min_holds: u8,
-    name: String,
-    id: usize,
-}
-
-impl Yatzy {
-    pub fn new() -> Yatzy {
-        Yatzy {
-            optimal_holds: OptimalHolds::new(),
-            min_holds: 5,
-            name: "yatzy".to_string(),
-            id: 14,
-        }
-    }
-}
-
-impl Hands for Yatzy {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn id(&self) -> usize {
-        self.id
-    }
-
-    fn min_holds(&self) -> u8 {
-        self.min_holds
-    }
-
-    fn optimal_holds_mut(&mut self) -> [&mut HashMap<u16, (u8, u16, f64)>;2] {
-        [&mut self.optimal_holds.first, &mut self.optimal_holds.second]
-    }
-
-    fn optimal_holds(&self, throw: Throw) -> Result<&HashMap<u16, (u8, u16, f64)>, String> {
-        match throw {
-            Throw::First => Ok(&self.optimal_holds.first),
-            Throw::Second => Ok(&self.optimal_holds.second),
-            _ => Err("Illegal throw".to_string()),
-        }
-    }
-
-    fn score(&self, dices: Vec<u8>) -> f64 {
-        let mut groups: [u8; 6] = [0; 6];
-        for dice in dices {
-            groups[dice as usize - 1] += 1;
-        }
-
-        for dice in (1..7).rev() {
-            if groups[dice - 1] > 4 {
-                return 50.0;
-            }
-        }
-
-        0.0
     }
 }

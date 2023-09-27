@@ -1,9 +1,9 @@
 use crate::dices::Dices;
 use crate::dices::Throw::{First, Second};
 use crate::score_box::rules::*;
-use crate::score_box::{Hands, MCHands};
+use crate::score_box::MCHands;
 use crate::utils::thread_pool;
-
+use crate::score_box::rules::HandType::*;
 enum LearnMode {
     Skip,
     Learn,
@@ -20,27 +20,28 @@ pub fn learn_hands(laps: i64, path: &str, rule: Option<usize>, debug: bool) -> R
     }
 
     pool.in_place_scope(|s| {
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Ones::new(), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Twos::new(), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Threes::new(), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Fours::new(), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Fives::new(), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Sixes::new(), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut OnePair::new(), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut TwoPairs::new(), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut ThreeOfAKind::new(), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut FourOfAKind::new(), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut SmallStraight::new(), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut LargeStraight::new(), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut FullHouse::new(), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Chance::new(), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Yatzy::new(), laps, path, learn));
+        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Ones), laps, path, learn));
+        //s.spawn(move |_| run(&mut MCHands::new(), &mut Ones::new(), laps, path, learn));
+        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Twos), laps, path, learn));
+        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Threes), laps, path, learn));
+        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Fours), laps, path, learn));
+        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Fives), laps, path, learn));
+        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Sixes), laps, path, learn));
+        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(OnePair), laps, path, learn));
+        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(TwoPairs), laps, path, learn));
+        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(ThreeOfAKind), laps, path, learn));
+        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(FourOfAKind), laps, path, learn));
+        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(SmallStraight), laps, path, learn));
+        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(LargeStraight), laps, path, learn));
+        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(FullHouse), laps, path, learn));
+        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Chance), laps, path, learn));
+        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Yatzy), laps, path, learn));
     });
 
     Ok(())
 }
 
-fn run<A: Hands>(mc: &mut MCHands, hand: &mut A, laps: i64, path: &str, learn: [&LearnMode;15]) {
+fn run(mc: &mut MCHands, hand: &mut Hand, laps: i64, path: &str, learn: [&LearnMode;15]) {
     if let LearnMode::Skip = learn[hand.id()] { return; }
 
     let mut dices = Dices::new();
@@ -68,24 +69,24 @@ fn run<A: Hands>(mc: &mut MCHands, hand: &mut A, laps: i64, path: &str, learn: [
     }
 }
 
-pub fn load_hands(path: &str) -> Result<Vec<Box<dyn Hands>>, String> {
-    let mut res: Vec<Box<dyn Hands>> = Vec::with_capacity(15);
+pub fn load_hands(path: &str) -> Result<Vec<Box<Hand>>, String> {
+    let mut res: Vec<Box<Hand>> = Vec::with_capacity(15);
 
-    res.push(Box::new(Ones::new()));
-    res.push(Box::new(Twos::new()));
-    res.push(Box::new(Threes::new()));
-    res.push(Box::new(Fours::new()));
-    res.push(Box::new(Fives::new()));
-    res.push(Box::new(Sixes::new()));
-    res.push(Box::new(OnePair::new()));
-    res.push(Box::new(TwoPairs::new()));
-    res.push(Box::new(ThreeOfAKind::new()));
-    res.push(Box::new(FourOfAKind::new()));
-    res.push(Box::new(SmallStraight::new()));
-    res.push(Box::new(LargeStraight::new()));
-    res.push(Box::new(FullHouse::new()));
-    res.push(Box::new(Chance::new()));
-    res.push(Box::new(Yatzy::new()));
+    res.push(Box::new(Hand::new(Ones)));
+    res.push(Box::new(Hand::new(Twos)));
+    res.push(Box::new(Hand::new(Threes)));
+    res.push(Box::new(Hand::new(Fours)));
+    res.push(Box::new(Hand::new(Fives)));
+    res.push(Box::new(Hand::new(Sixes)));
+    res.push(Box::new(Hand::new(OnePair)));
+    res.push(Box::new(Hand::new(TwoPairs)));
+    res.push(Box::new(Hand::new(ThreeOfAKind)));
+    res.push(Box::new(Hand::new(FourOfAKind)));
+    res.push(Box::new(Hand::new(SmallStraight)));
+    res.push(Box::new(Hand::new(LargeStraight)));
+    res.push(Box::new(Hand::new(FullHouse)));
+    res.push(Box::new(Hand::new(Chance)));
+    res.push(Box::new(Hand::new(Yatzy)));
 
     for h in 0..res.len() {
         res[h].load_optimal_holds(path)?;
