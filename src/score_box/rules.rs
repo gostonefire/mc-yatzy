@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use crate::dices::Throw::{First, Second};
-use crate::utils::{base10_to_base7, records_in_file, write_records_header};
+use crate::utils::{base10_to_base2, base10_to_base7, records_in_file, write_records_header};
 
 pub struct Hand {
     optimal_holds: OptimalHolds,
@@ -466,4 +466,34 @@ impl HandType {
             },
         }
     }
+}
+
+pub fn best_available_hand(throw: Throw, thrown: u16, available_hands: u16, hands: &Vec<Box<Hand>>) -> Result<usize, String> {
+    let mut best_hand: Option<usize> = None;
+    let mut max_prob: f64 = 0.0;
+    let mut prob: f64;
+
+    match throw {
+        First => {
+            for hand in base10_to_base2(available_hands, false) {
+                prob = hands[hand as usize].max_score_probability(First, thrown)?;
+                if prob > max_prob {
+                    max_prob = prob;
+                    best_hand = Some(hand as usize);
+                }
+            }
+        },
+        Second => {
+            for hand in base10_to_base2(available_hands, false) {
+                prob = hands[hand as usize].max_score_probability(Second, thrown)?;
+                if prob > max_prob {
+                    max_prob = prob;
+                    best_hand = Some(hand as usize);
+                }
+            }
+        },
+        _ => return Err("Illegal throw at this point".to_string()),
+    }
+
+    if let Some(hand) = best_hand {Ok(hand)} else {Err("No best hand found".to_string())}
 }

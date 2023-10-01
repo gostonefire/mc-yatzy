@@ -22,9 +22,7 @@ pub fn write_records_header<A, B>(file: &mut BufWriter<File>, arr: &Vec<&HashMap
 }
 
 pub fn thread_pool() -> Result<ThreadPool, String> {
-    let n_threads = thread::available_parallelism()
-        .expect("should get parallelism on this platform")
-        .get();
+    let n_threads = available_threads();
 
     let pool = match rayon::ThreadPoolBuilder::new()
         .num_threads(n_threads)
@@ -40,6 +38,12 @@ pub fn thread_pool() -> Result<ThreadPool, String> {
     };
 
     Ok(pool)
+}
+
+pub fn available_threads() -> usize {
+    thread::available_parallelism()
+        .expect("should get parallelism on this platform")
+        .get()
 }
 
 pub fn base7_to_base10(b7: &Vec<u8>) -> u16 {

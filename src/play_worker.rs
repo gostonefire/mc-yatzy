@@ -5,7 +5,7 @@ use crate::dices::{Dices, Throw};
 use crate::game_box::rules::GameRules;
 use crate::game_worker::load_game;
 use crate::hand_worker::load_hands;
-use crate::score_box::rules::Hand;
+use crate::score_box::rules::{best_available_hand, Hand};
 use crate::utils::{base10_to_base2, base10_to_base7, base7_to_base10, initcap};
 
 pub fn play_with_own_dices(path: &str) -> Result<(), String> {
@@ -48,17 +48,17 @@ fn query_mc_input(available_hands: u16, game: &GameRules, hands: &Vec<Box<Hand>>
     let mut dices = Dices::new();
 
     let t1_code = base7_to_base10(&dices.throw_and_hold(None));
-    let h1 = game.propose_hand(t1_code, available_hands)?;
-    let (_, s1_code, _) = hands[h1 as usize].optimal_holds(Throw::First)?.get(&t1_code).unwrap();
+    let h1 = best_available_hand(Throw::First, t1_code, available_hands, &hands)?;
+    let (_, s1_code, _) = hands[h1].optimal_holds(Throw::First)?.get(&t1_code).unwrap();
 
     let t2_code = base7_to_base10(&dices.throw_and_hold(Some(base10_to_base7(*s1_code))));
-    let h2 = game.propose_hand(t2_code, available_hands)?;
-    let (_, s2_code, _) = hands[h2 as usize].optimal_holds(Throw::Second)?.get(&t2_code).unwrap();
+    let h2 = best_available_hand(Throw::Second, t2_code, available_hands, &hands)?;
+    let (_, s2_code, _) = hands[h2].optimal_holds(Throw::Second)?.get(&t2_code).unwrap();
 
     let t3_code = base7_to_base10(&dices.throw_and_hold(Some(base10_to_base7(*s2_code))));
-    let h3 = game.propose_hand(t3_code, available_hands)?;
+    let h3 = best_available_game_hand(t3_code, available_hands, &hands, &game)?;
 
-    Ok((base10_to_base7(t3_code), h3))
+    Ok((base10_to_base7(t3_code), h3 as u8))
 }
 
 fn query_human_input(available_hands: u16) -> (Vec<u8>, u8) {
@@ -131,6 +131,25 @@ fn get_hand_choice(available_hands: Vec<u8>) -> u8 {
             }
         }
     }
+}
+
+pub fn best_available_game_hand(thrown: u16, available_hands: u16, hands: &Vec<Box<Hand>>, game: &GameRules) -> Result<usize, String> {
+    let mut best_hand: Option<usize> = None;
+    let mut expected_score: f64;
+    let mut max_score: f64 = -1.0;
+    let mut score: u8;
+
+    for hand in base10_to_base2(available_hands, false) {
+        score = hands[hand as usize].score(base10_to_base7(thrown)) as u8;
+        expected_score = game.expected_total_score(score, hand, available_hands)?;
+
+        if expected_score > max_score {
+            max_score = expected_score;
+            best_hand = Some(hand as usize);
+        }
+    }
+
+    if let Some(hand) = best_hand {Ok(hand)} else {Err("No best hand found".to_string())}
 }
 
 fn get_dices_input(caption: &str, dices: Option<&Vec<u8>>, hold: Option<&Vec<u8>>) -> Vec<u8> {

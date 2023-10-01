@@ -21,7 +21,6 @@ pub fn learn_hands(laps: i64, path: &str, rule: Option<usize>, debug: bool) -> R
 
     pool.in_place_scope(|s| {
         s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Ones), laps, path, learn));
-        //s.spawn(move |_| run(&mut MCHands::new(), &mut Ones::new(), laps, path, learn));
         s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Twos), laps, path, learn));
         s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Threes), laps, path, learn));
         s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Fours), laps, path, learn));
