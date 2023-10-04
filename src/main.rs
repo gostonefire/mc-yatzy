@@ -80,7 +80,7 @@ fn main() -> Result<(), String> {
         },
         Commands::Play {} => {
             play_game(&args.path)?;
-        }
+        },
     }
 
     println!("Done!");

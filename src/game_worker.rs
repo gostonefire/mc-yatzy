@@ -93,7 +93,7 @@ fn run(
             let score = hands[hand].score(base10_to_base7(t3_code));
 
             results[hand].available_hands = available_hands;
-            results[hand].score = score as u8;
+            results[hand].score = score as u64;
         }
 
         {

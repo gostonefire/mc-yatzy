@@ -11,7 +11,7 @@ use std::io::{BufReader, BufWriter, Read, Write};
 #[derive(Clone)]
 pub struct IntermediateResult {
     pub available_hands: u16,
-    pub score: u8,
+    pub score: u64,
 }
 
 impl IntermediateResult {
@@ -25,7 +25,7 @@ impl IntermediateResult {
 
 pub struct MCScore {
     // (score, hand, available hands), (hits, expected score)
-    mc_scores: HashMap<(u8, u8, u16), (f64, f64)>,
+    mc_scores: HashMap<(u8, u8, u16), (u64, u64)>,
     name: String,
     laps: u64,
 }
@@ -42,31 +42,36 @@ impl MCScore {
     pub fn update_scores(&mut self, intermediate_results: &Vec<IntermediateResult>) -> u64 {
         let bonus = if intermediate_results[0..6]
             .iter()
-            .map(|i| i.score as f64)
-            .sum::<f64>()
-            < 63.0
+            .map(|i| i.score)
+            .sum::<u64>()
+            < 63
         {
-            0.0
+            0u64
         } else {
-            50.0
+            50u64
         };
-        let total_score = intermediate_results.iter().map(|i| i.score as f64).sum::<f64>() + bonus;
+        let total_score = intermediate_results.iter().map(|i| i.score).sum::<u64>() + bonus;
 
-        for (i, hand) in intermediate_results.iter().enumerate() {
+        let mut hand: u8;
+        let mut score: u8;
+        for (i, ir) in intermediate_results.iter().enumerate() {
+            hand = i as u8;
+            score = ir.score as u8;
+
             match self
                 .mc_scores
-                .get(&(hand.score, i as u8, hand.available_hands))
+                .get(&(score, hand, ir.available_hands))
             {
                 Some((hits, value)) => {
                     self.mc_scores.insert(
-                        (hand.score, i as u8, hand.available_hands),
-                        (*hits + 1.0, *value + total_score),
+                        (score, hand, ir.available_hands),
+                        (*hits + 1, *value + total_score),
                     );
                 }
                 None => {
                     self.mc_scores.insert(
-                        (hand.score, i as u8, hand.available_hands),
-                        (1.0, total_score),
+                        (score, hand, ir.available_hands),
+                        (1, total_score),
                     );
                 }
             }
@@ -79,17 +84,20 @@ impl MCScore {
     pub fn update_optimal_game(&self, optimal_game: &mut HashMap<(u8, u8, u16), f64>) {
         optimal_game.clear();
 
+        let mut actual_score: f64;
+
         for ((score, hand, available_hands), (hits, value)) in self.mc_scores.iter() {
+            actual_score = *value as f64 / *hits as f64;
             match optimal_game.get(&(*score, *hand, *available_hands)) {
                 Some(expected_score) => {
-                    if *value / *hits > *expected_score {
+                    if actual_score > *expected_score {
                         optimal_game
-                            .insert((*score, *hand, *available_hands), *value / *hits);
+                            .insert((*score, *hand, *available_hands), actual_score);
                     }
                 }
                 None => {
                     optimal_game
-                        .insert((*score, *hand, *available_hands), *value / *hits);
+                        .insert((*score, *hand, *available_hands), actual_score);
                 }
             }
         }
@@ -156,8 +164,8 @@ impl MCScore {
                     let score = buf[0];
                     let hand = buf[1];
                     let available_hands = u16::from_le_bytes(buf[2..4].try_into().unwrap());
-                    let hits = f64::from_le_bytes(buf[4..12].try_into().unwrap());
-                    let value = f64::from_le_bytes(buf[12..20].try_into().unwrap());
+                    let hits = u64::from_le_bytes(buf[4..12].try_into().unwrap());
+                    let value = u64::from_le_bytes(buf[12..20].try_into().unwrap());
 
                     self.mc_scores.insert((score, hand, available_hands), (hits, value));
                 }
@@ -185,7 +193,7 @@ impl MCScore {
             mut min_score_sum,
             mut max_score,
             mut min_score,
-        ) = (0.0f64, f64::MAX, 0.0f64, f64::MAX, 0.0f64, f64::MAX);
+        ) = (0u64, u64::MAX, 0u64, u64::MAX, 0.0f64, f64::MAX);
 
         let mut debug_count = 100;
         let mut count: usize = 0;
@@ -196,14 +204,14 @@ impl MCScore {
             min_hits = min_hits.min(*hits);
             max_score_sum = max_score_sum.max(*value);
             min_score_sum = min_score_sum.min(*value);
-            score_avg = value / hits;
+            score_avg = *value as f64 / *hits as f64;
             max_score = max_score.max(score_avg);
             min_score = min_score.min(score_avg);
-            if *hits < 20.0 {
+            if *hits < 20 {
                 buckets[*hits as usize] += 1;
-                if *hits == 1.0 && debug_count > 0 {
+                if *hits == 1 && debug_count > 0 {
                     let a_vec = base10_to_base2(*available_hands, true);
-                    println!("{:2} [{:2}] {:51} -> {:12} {:12}", *score, *hand + 1, format!("{:?}", a_vec), *hits as u64, *value as u64);
+                    println!("{:2} [{:2}] {:51} -> {:12} {:12}", *score, *hand + 1, format!("{:?}", a_vec), *hits, *value);
                     debug_count -= 1;
                 }
             }
