@@ -6,7 +6,7 @@ mod score_box;
 mod utils;
 mod play_worker;
 
-use crate::game_worker::{learn_game, load_game, print_statistics};
+use crate::game_worker::{learn_game, load_game, load_mcscore};
 use crate::hand_worker::load_hands;
 use clap::{Parser, Subcommand};
 use hand_worker::learn_hands;
@@ -53,12 +53,16 @@ enum Commands {
         /// Export the game model
         #[arg(short, long)]
         game: bool,
+
+        /// Export the mc score model
+        #[arg(short, long)]
+        mcscore: bool,
     },
 
     /// Print some statistics
     Stats {
         #[arg(short, long)]
-        mcgame: bool,
+        mcscore: bool,
     },
 
     /// Run game of yatzy
@@ -72,11 +76,11 @@ fn main() -> Result<(), String> {
         Commands::Learn {scores, rule, game, debug} => {
             learn_models(&args.path, scores, rule, game, debug)?
         },
-        Commands::Export {scores, game} => {
-            export_models(&args.path, scores, game)?;
+        Commands::Export {scores, game, mcscore} => {
+            export_models(&args.path, scores, game, mcscore)?;
         },
-        Commands::Stats {mcgame} => {
-            print_models_statistics(&args.path, mcgame)?
+        Commands::Stats {mcscore} => {
+            print_models_statistics(&args.path, mcscore)?
         },
         Commands::Play {} => {
             play_game(&args.path)?;
@@ -103,13 +107,16 @@ fn learn_models(path: &str, scores: Option<i64>, rule: Option<usize>, game: Opti
 
 fn print_models_statistics(path: &str, mcgame: bool) -> Result<(), String> {
     if mcgame {
-        print_statistics(path)?
+        println!("Start loading mc score file");
+        let mc_score = load_mcscore(path)?;
+        println!("...calculating statistics");
+        println!("{}\n", mc_score.statistics()?);
     }
 
     Ok(())
 }
 
-fn export_models(path: &str, scores: bool, game: bool) -> Result<(), String> {
+fn export_models(path: &str, scores: bool, game: bool, mcscore: bool) -> Result<(), String> {
     if scores {
         println!("Start loading rules");
         let hand_rules = load_hands(path)?;
@@ -122,6 +129,13 @@ fn export_models(path: &str, scores: bool, game: bool) -> Result<(), String> {
         let game_rules = load_game(path)?;
         println!("Start exporting game");
         game_rules.export_optimal_games(path)?;
+    }
+
+    if mcscore {
+        println!("Start loading mc score file");
+        let mc_score = load_mcscore(path)?;
+        println!("Start exporting scores");
+        mc_score.export_score(path)?;
     }
 
     Ok(())

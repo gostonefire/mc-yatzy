@@ -1,6 +1,6 @@
 pub mod rules;
 
-use crate::utils::{base10_to_base2, records_in_file, write_records_header};
+use crate::utils::{base10_to_base2, records_in_file, sort_key, write_records_header};
 use rand::rngs::ThreadRng;
 use rand::seq::{IteratorRandom, SliceRandom};
 use std::collections::HashMap;
@@ -181,6 +181,33 @@ impl MCScore {
         Ok(Some(()))
     }
 
+    pub fn export_score(&self, path: &str) -> Result<(), String> {
+        let path_name = &format!("{}/export.{}.txt", path, self.name);
+        let mut buf_writer = match File::create(path_name) {
+            Ok(f) => BufWriter::new(f),
+            Err(e) => return Err(format!("Error while open/create file {}: {}", path_name, e)),
+        };
+
+        let mut keys: Vec<(u8, u8, u16)> = self.mc_scores.keys().map(|k| *k).collect::<Vec<(u8, u8, u16)>>();
+        keys.sort_by_key(|k| (k.0 as u64 * 1000 + k.1 as u64) * 10000000 + sort_key(k.2));
+
+
+        for (score, hand, available_hands) in keys {
+            let (hits, total_score) = self.mc_scores.get(&(score, hand, available_hands)).unwrap();
+            let a_vec = base10_to_base2(available_hands, true);
+
+            let row = format!("{:2} [{:2}] {:51} -> {:12} {:12}\n", score, hand + 1, format!("{:?}", a_vec), *hits, *total_score);
+            if let Err(e) = buf_writer.write_all(row.as_bytes()) {
+                return Err(format!("Error while writing to file {}: {}", path_name, e));
+            }
+        }
+
+        if let Err(e) = buf_writer.flush() {
+            return Err(format!("Error while writing to file {}: {}", path_name, e));
+        }
+        Ok(())
+    }
+
     pub fn statistics(&self) -> Result<String, String> {
         if self.mc_scores.len() == 0  {
             return Err("MC Score hash table is empty".to_string());
@@ -195,11 +222,10 @@ impl MCScore {
             mut min_score,
         ) = (0u64, u64::MAX, 0u64, u64::MAX, 0.0f64, f64::MAX);
 
-        let mut debug_count = 100;
         let mut count: usize = 0;
         let mut score_avg: f64;
         let mut buckets = [0u64;20];
-        for ((score, hand, available_hands),(hits, value)) in &self.mc_scores {
+        for ((_, _, _),(hits, value)) in &self.mc_scores {
             max_hits = max_hits.max(*hits);
             min_hits = min_hits.min(*hits);
             max_score_sum = max_score_sum.max(*value);
@@ -209,11 +235,6 @@ impl MCScore {
             min_score = min_score.min(score_avg);
             if *hits < 20 {
                 buckets[*hits as usize] += 1;
-                if *hits == 1 && debug_count > 0 {
-                    let a_vec = base10_to_base2(*available_hands, true);
-                    println!("{:2} [{:2}] {:51} -> {:12} {:12}", *score, *hand + 1, format!("{:?}", a_vec), *hits, *value);
-                    debug_count -= 1;
-                }
             }
             count += 1;
         }

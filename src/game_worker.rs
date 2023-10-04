@@ -6,7 +6,6 @@ use crate::utils::{available_threads, base10_to_base7, base7_to_base10};
 use num_format::{Locale, ToFormattedString};
 use std::sync::{Arc, Mutex};
 use rayon::prelude::IntoParallelIterator;
-use crate::score_box::rules::best_available_hand;
 use rayon::iter::ParallelIterator;
 
 
@@ -79,17 +78,16 @@ fn run(
                 break;
             };
 
+            let hand = mc.pick_hand().expect("should always return Some in this context");
+
             let t1_code = base7_to_base10(&dices.throw_and_hold(None));
-            let h1 = best_available_hand(Throw::First, t1_code, available_hands, &hands)?;
-            let (_, s1_code, _) = hands[h1].optimal_holds(Throw::First)?.get(&t1_code).unwrap();
+            let (_, s1_code, _) = hands[hand].optimal_holds(Throw::First)?.get(&t1_code).unwrap();
 
             let t2_code = base7_to_base10(&dices.throw_and_hold(Some(base10_to_base7(*s1_code))));
-            let h2 = best_available_hand(Throw::Second, t2_code, available_hands, &hands)?;
-            let (_, s2_code, _) = hands[h2].optimal_holds(Throw::Second)?.get(&t2_code).unwrap();
+            let (_, s2_code, _) = hands[hand].optimal_holds(Throw::Second)?.get(&t2_code).unwrap();
 
             let t3_code = base7_to_base10(&dices.throw_and_hold(Some(base10_to_base7(*s2_code))));
 
-            let hand = mc.pick_hand().expect("should always return Some in this context");
             let score = hands[hand].score(base10_to_base7(t3_code));
 
             results[hand].available_hands = available_hands;
@@ -141,18 +139,12 @@ pub fn load_game(path: &str) -> Result<GameRules, String> {
     Ok(games_rules)
 }
 
-pub fn print_statistics(path: &str) -> Result<(), String> {
+pub fn load_mcscore(path: &str) -> Result<MCScore, String> {
     let mut mc_score = MCScore::new();
-
-    println!("Start loading mc score file for statistics");
     if let None = mc_score.load_scores(path)? {
         return Err("Error, mc score file not found".to_string());
     }
 
-    println!("...calculating statistics");
-    let result = mc_score.statistics()?;
-
-    println!("{}\n", result);
-
-    Ok(())
+    Ok(mc_score)
 }
+

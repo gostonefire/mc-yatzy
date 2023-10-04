@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io::stdin;
 use std::str::FromStr;
+use colored::{ColoredString, Colorize};
 use crate::dices::{Dices, Throw};
 use crate::game_box::rules::GameRules;
 use crate::game_worker::load_game;
@@ -26,6 +27,7 @@ pub fn play_with_own_dices(path: &str) -> Result<(), String> {
         })
         .collect::<Vec<String>>();
 
+    print_score_card(&human_scores, &mc_scores, &hand_names, (0, 0));
     println!("Input dices without separators, e.g. 13234");
     while human_available_hands > 0 {
         let (dices, hand) = query_human_input(human_available_hands);
@@ -33,12 +35,12 @@ pub fn play_with_own_dices(path: &str) -> Result<(), String> {
         human_scores.insert(hand, score as u16);
         human_available_hands -= 2u16.pow(hand as u32);
 
-        let (dices, hand) = query_mc_input(mc_available_hands, &game, &hands)?;
-        let score = hands[hand as usize].score(dices);
-        mc_scores.insert(hand, score as u16);
-        mc_available_hands -= 2u16.pow(hand as u32);
+        let (dices, mc_hand) = query_mc_input(mc_available_hands, &game, &hands)?;
+        let score = hands[mc_hand as usize].score(dices);
+        mc_scores.insert(mc_hand, score as u16);
+        mc_available_hands -= 2u16.pow(mc_hand as u32);
 
-        print_score_card(&human_scores, &mc_scores, &hand_names);
+        print_score_card(&human_scores, &mc_scores, &hand_names, (hand, mc_hand));
     }
 
     Ok(())
@@ -212,7 +214,7 @@ fn get_dices_input(caption: &str, dices: Option<&Vec<u8>>, hold: Option<&Vec<u8>
     res
 }
 
-fn print_score_card(human_scores: &HashMap<u8, u16>, mc_scores: &HashMap<u8, u16>, names: &Vec<String>) {
+fn print_score_card(human_scores: &HashMap<u8, u16>, mc_scores: &HashMap<u8, u16>, names: &Vec<String>, latest: (u8, u8)) {
     let mut human_total: u16 = 0;
     let mut mc_total: u16 = 0;
 
@@ -220,20 +222,9 @@ fn print_score_card(human_scores: &HashMap<u8, u16>, mc_scores: &HashMap<u8, u16
     println!("| Player:              |Human|  MC |");
     println!("|==================================|");
     for i in 0..15u8 {
-        let human_score = match human_scores.get(&i) {
-            Some(score) => {
-                human_total += *score;
-                score.to_string()
-            },
-            None => String::new()
-        };
-        let mc_score = match mc_scores.get(&i) {
-            Some(score) => {
-                mc_total += *score;
-                score.to_string()
-            },
-            None => String::new()
-        };
+        let human_score = format_score_string(&human_scores, i, i==latest.0, &mut human_total);
+        let mc_score = format_score_string(&mc_scores, i, i==latest.1, &mut mc_total);
+
         println!("| {:2}. {:16} | {:3} | {:3} |", i+1, names[i as usize], human_score, mc_score);
 
         if i == 5 {
@@ -248,4 +239,22 @@ fn print_score_card(human_scores: &HashMap<u8, u16>, mc_scores: &HashMap<u8, u16
     }
     println!("|==================================|");
     println!("     {:16}   {:3}   {:3}\n", "Total:", human_total, mc_total);
+}
+
+fn format_score_string(scores: &HashMap<u8, u16>, pos: u8, is_latest: bool, total: &mut u16) -> ColoredString {
+    let mut formatted_score = match scores.get(&pos) {
+        Some(s) => {
+            *total += *s;
+            if pos < 6 && *s < (pos as u16 + 1) * 3 {
+                s.to_string().bright_yellow()
+            } else {
+                s.to_string().normal()
+            }
+        }
+        None => String::new().normal()
+    };
+
+    if is_latest {formatted_score = formatted_score.bright_green();}
+
+    formatted_score
 }
