@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::format;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use crate::DEBUG_DIR;
 
 pub struct OptimalHolds {
     first: HashMap<u16, (u8, u16, f64)>,
@@ -86,7 +87,7 @@ impl MCHands {
     pub fn debug_scores(&self, path: &str, name: &str) -> Result<(), String> {
         let score_arr = [&self.first, &self.second];
 
-        let path_name = &format!("{}/debug.{}.{}.txt", path, self.name, name);
+        let path_name = &format!("{}/{}/{}.{}.txt", path, DEBUG_DIR, self.name, name);
         let mut buf_writer = match File::create(path_name) {
             Ok(f) => BufWriter::new(f),
             Err(e) => return Err(format!("Error while open/create file {}: {}", path_name, e)),

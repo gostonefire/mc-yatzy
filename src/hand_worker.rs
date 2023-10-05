@@ -4,46 +4,48 @@ use crate::score_box::rules::*;
 use crate::score_box::MCHands;
 use crate::utils::thread_pool;
 use crate::score_box::rules::HandType::*;
-enum LearnMode {
+pub enum LearnMode {
     Skip,
     Learn,
     Debug,
 }
 
-pub fn learn_hands(laps: i64, path: &str, rule: Option<usize>, debug: bool) -> Result<(), String> {
+pub fn learn_hands(laps: i64, path: &str, rule: Option<usize>, full: bool) -> Result<(), String> {
     let pool = thread_pool()?;
     let mut learn: [&LearnMode;15] = [&LearnMode::Skip;15];
     if let Some(r) = rule {
-        learn[r] = if debug {&LearnMode::Debug} else {&LearnMode::Learn};
+        learn[r] = if full {&LearnMode::Debug} else {&LearnMode::Learn};
     } else {
-        learn = if debug {[&LearnMode::Debug;15]} else {[&LearnMode::Learn;15]};
+        learn = if full {[&LearnMode::Debug;15]} else {[&LearnMode::Learn;15]};
     }
 
     pool.in_place_scope(|s| {
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Ones), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Twos), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Threes), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Fours), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Fives), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Sixes), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(OnePair), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(TwoPairs), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(ThreeOfAKind), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(FourOfAKind), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(SmallStraight), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(LargeStraight), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(FullHouse), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Chance), laps, path, learn));
-        s.spawn(move |_| run(&mut MCHands::new(), &mut Hand::new(Yatzy), laps, path, learn));
+        s.spawn(move |_| run(Ones, laps, path, learn));
+        s.spawn(move |_| run(Twos, laps, path, learn));
+        s.spawn(move |_| run(Threes, laps, path, learn));
+        s.spawn(move |_| run(Fours, laps, path, learn));
+        s.spawn(move |_| run(Fives, laps, path, learn));
+        s.spawn(move |_| run(Sixes, laps, path, learn));
+        s.spawn(move |_| run(OnePair, laps, path, learn));
+        s.spawn(move |_| run(TwoPairs, laps, path, learn));
+        s.spawn(move |_| run(ThreeOfAKind, laps, path, learn));
+        s.spawn(move |_| run(FourOfAKind, laps, path, learn));
+        s.spawn(move |_| run(SmallStraight, laps, path, learn));
+        s.spawn(move |_| run(LargeStraight, laps, path, learn));
+        s.spawn(move |_| run(FullHouse, laps, path, learn));
+        s.spawn(move |_| run(Chance, laps, path, learn));
+        s.spawn(move |_| run(Yatzy, laps, path, learn));
     });
 
     Ok(())
 }
 
-fn run(mc: &mut MCHands, hand: &mut Hand, laps: i64, path: &str, learn: [&LearnMode;15]) {
-    if let LearnMode::Skip = learn[hand.id()] { return; }
+fn run(hand_type: HandType, laps: i64, path: &str, learn: [&LearnMode;15]) {
+    if let LearnMode::Skip = learn[hand_type.id()] { return; }
 
     let mut dices = Dices::new();
+    let mut hand = Hand::new(hand_type);
+    let mut mc = MCHands::new();
     println!("Learning {}", hand.name());
 
     for _ in 0..laps {
@@ -68,7 +70,7 @@ fn run(mc: &mut MCHands, hand: &mut Hand, laps: i64, path: &str, learn: [&LearnM
     }
 }
 
-pub fn load_hands(path: &str) -> Result<Vec<Box<Hand>>, String> {
+pub fn load_hands(path: &str, fail: bool) -> Result<Vec<Box<Hand>>, String> {
     let mut res: Vec<Box<Hand>> = Vec::with_capacity(15);
 
     res.push(Box::new(Hand::new(Ones)));
@@ -87,8 +89,16 @@ pub fn load_hands(path: &str) -> Result<Vec<Box<Hand>>, String> {
     res.push(Box::new(Hand::new(Chance)));
     res.push(Box::new(Hand::new(Yatzy)));
 
-    for h in 0..res.len() {
-        res[h].load_optimal_holds(path)?;
+    let mut index = res.len();
+    while index > 0 {
+        if let Err(e) = res[index-1].load_optimal_holds(path) {
+            if fail {
+                return Err(e);
+            }
+            res.remove(index-1);
+        }
+        index -= 1;
     }
+
     Ok(res)
 }

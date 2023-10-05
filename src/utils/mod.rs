@@ -1,8 +1,26 @@
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{create_dir, File};
 use std::io::{BufReader, BufWriter, Read, Write};
+use std::path::Path;
 use std::thread;
 use rayon::ThreadPool;
+
+pub fn check_path_create_folder(path: &str, folder: Option<&str>) -> Result<bool, String> {
+    if  !Path::new(path).is_dir() {
+        return Ok(false);
+    }
+
+    if let Some(f) = folder {
+        let full_path = &format!("{}/{}", path, f);
+        if !Path::new(full_path).is_dir() {
+            if let Err(e) = create_dir(full_path) {
+                return Err(format!("Error, unable to create folder {}: {}", full_path, e));
+            }
+        }
+    }
+
+    Ok(true)
+}
 
 pub fn records_in_file(buf_reader: &mut BufReader<File>, context: &str) -> Result<u64, String> {
     let mut buf = [0u8;8];
@@ -96,12 +114,6 @@ pub fn base10_to_base2(b10: u16, one_based: bool) -> Vec<u8> {
         }
     }
     res
-}
-
-pub fn sort_key(value: u16) -> u64 {
-    let a = (16 - value.count_ones()) * 100000;
-    let b = 32767 - (value as u32 ^ 32767);
-    (a + b) as u64
 }
 
 pub fn initcap(data: String) -> String {

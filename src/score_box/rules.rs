@@ -2,7 +2,10 @@ use crate::score_box::{OptimalHolds, Throw};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
+use rand::distributions::{Distribution, WeightedIndex};
+use rand::rngs::ThreadRng;
 use crate::dices::Throw::{First, Second};
+use crate::EXPORT_DIR;
 use crate::utils::{base10_to_base2, base10_to_base7, records_in_file, write_records_header};
 
 pub struct Hand {
@@ -17,6 +20,7 @@ impl Hand {
             hand,
         }
     }
+
     pub fn name(&self) -> String {
         self.hand.name().clone()
     }
@@ -51,14 +55,14 @@ impl Hand {
     }
 
     pub fn score(&self, dices: Vec<u8>) -> f64 {
-        self.hand.score(dices)
+        self.hand.score(&dices)
     }
 
     pub fn load_optimal_holds(&mut self, path: &str) -> Result<(), String> {
-        let name = self.name();
+        let name = self.hand.name();
         let opt_arr = self.optimal_holds_mut();
 
-        let path_name = &format!("{}/{}.bin", path, name);
+        let path_name = &format!("{}/hand.{}.bin", path, name);
         let mut buf_reader = match File::open(path_name) {
             Ok(f) => BufReader::new(f),
             Err(e) => return Err(format!("Error while open file {}: {}", path_name, e)),
@@ -93,7 +97,7 @@ impl Hand {
     pub fn save_optimal_holds(&self, path: &str) -> Result<(), String> {
         let opt_vec = vec![self.optimal_holds(First)?, self.optimal_holds(Second)?];
 
-        let path_name = &format!("{}/{}.bin", path, self.name());
+        let path_name = &format!("{}/hand.{}.bin", path, self.hand.name());
         let mut buf_writer = match File::create(path_name) {
             Ok(f) => BufWriter::new(f),
             Err(e) => return Err(format!("Error while open/create file {}: {}", path_name, e)),
@@ -135,7 +139,7 @@ impl Hand {
     pub fn export_optimal_holds(&self, path: &str) -> Result<(), String> {
         let opt_arr = [self.optimal_holds(First)?, self.optimal_holds(Second)?];
 
-        let path_name = &format!("{}/export.{}.txt", path, self.name());
+        let path_name = &format!("{}/{}/hand.{}.txt", path, EXPORT_DIR, self.hand.name());
         let mut buf_writer = match File::create(path_name) {
             Ok(f) => BufWriter::new(f),
             Err(e) => return Err(format!("Error while open/create file {}: {}", path_name, e)),
@@ -170,6 +174,168 @@ impl Hand {
 
 }
 
+pub struct HandDistribution {
+    distr: HashMap<u8, u64>,
+    n_hits: u64,
+    mean: f64,
+    rng: ThreadRng,
+    weights: (Vec<u8>, Vec<u64>),
+    weighted_index: WeightedIndex<u64>,
+    hand: HandType,
+}
+
+impl HandDistribution {
+    pub fn new(hand: HandType) -> HandDistribution {
+        HandDistribution {
+            distr: HashMap::new(),
+            n_hits: 0,
+            mean: 0.0,
+            rng: rand::thread_rng(),
+            weights: (Vec::new(), Vec::new()),
+            weighted_index: WeightedIndex::new([1]).unwrap(),
+            hand,
+        }
+    }
+
+    pub fn name(&self) -> String {
+        self.hand.name().clone()
+    }
+
+    pub fn update_scores(&mut self, score: u8) {
+        match self.distr.get(&score) {
+            Some(d) => {
+                self.distr.insert(score, *d + 1);
+            },
+            None => {
+                self.distr.insert(score, 1);
+            }
+        }
+        self.n_hits += 1;
+    }
+
+    pub fn len(&self) -> u32 {
+        self.distr.len() as u32
+    }
+
+    pub fn mean_score(&self, extras: Option<f64>) -> Result<f64, String> {
+        if self.n_hits > 0 {
+            Ok(self.mean + extras.unwrap_or_default())
+        } else {
+            Err("Error, no data available for calculating mean score".to_string())
+        }
+    }
+
+    pub fn sample_from_distribution(&mut self) -> u8 {
+        self.weights.0[self.weighted_index.sample(&mut self.rng)]
+    }
+
+    fn update_weighted_index(&mut self) {
+        if self.distr.iter().map(|(_, &h)| h).sum::<u64>() > 0 {
+            self.weights= self.distr.iter().unzip();
+            self.weighted_index = WeightedIndex::new(&self.weights.1).unwrap();
+        }
+    }
+
+    fn update_mean_score(&mut self) {
+        if self.n_hits > 0 {
+            let total_score = self.distr.iter().map(|(&s, &h)| s as f64 * h as f64).sum::<f64>();
+            self.mean = total_score / self.n_hits as f64;
+        }
+    }
+
+    pub fn load_distribution(&mut self, path: &str) -> Result<(), String> {
+        let path_name = &format!("{}/distr.{}.bin", path, self.hand.name());
+        let mut buf_reader = match File::open(path_name) {
+            Ok(f) => BufReader::new(f),
+            Err(e) => return Err(format!("Error while open file {}: {}", path_name, e)),
+        };
+
+        self.n_hits = 0;
+        let mut buf = [0u8; 9];
+        let mut n_records = records_in_file(&mut buf_reader, path_name)?;
+
+        while n_records > 0 {
+            match buf_reader.read_exact(&mut buf) {
+                Ok(()) => {
+                    let score = buf[0];
+                    let hits = u64::from_le_bytes(buf[1..9].try_into().unwrap());
+
+                    self.distr.insert(score, hits);
+                    self.n_hits += hits;
+                }
+                Err(e) => {
+                    return Err(format!(
+                        "Error while reading from file {}: {}",
+                        path_name, e
+                    ));
+                }
+            }
+            n_records -= 1;
+        }
+        self.update_mean_score();
+        self.update_weighted_index();
+
+        Ok(())
+    }
+
+    pub fn save_distribution(&mut self, path: &str) -> Result<(), String> {
+        let path_name = &format!("{}/distr.{}.bin", path, self.hand.name());
+        let mut buf_writer = match File::create(path_name) {
+            Ok(f) => BufWriter::new(f),
+            Err(e) => return Err(format!("Error while open/create file {}: {}", path_name, e)),
+        };
+
+        let _ = write_records_header(&mut buf_writer, &vec![&self.distr], path_name)?;
+
+        let mut buf = [0u8; 9];
+        let mut offset: usize;
+        for (score, hits) in &self.distr {
+            offset = 1;
+            buf[0] = *score;
+            (*hits).to_le_bytes().iter().for_each(|v| {
+                buf[offset] = *v;
+                offset += 1;
+            });
+
+            if let Err(e) = buf_writer.write_all(&buf) {
+                return Err(format!("Error while writing to file {}: {}", path_name, e));
+            }
+        }
+        if let Err(e) = buf_writer.flush() {
+            return Err(format!("Error while writing to file {}: {}", path_name, e));
+        }
+        self.update_mean_score();
+        self.update_weighted_index();
+
+        Ok(())
+    }
+
+    pub fn export_distribution(&self, path: &str) -> Result<(), String> {
+        let path_name = &format!("{}/{}/distr.{}.txt", path, EXPORT_DIR, self.hand.name());
+        let mut buf_writer = match File::create(path_name) {
+            Ok(f) => BufWriter::new(f),
+            Err(e) => return Err(format!("Error while open/create file {}: {}", path_name, e)),
+        };
+
+        let mut keys: Vec<u8> = self.distr.keys().map(|k| *k).collect();
+        keys.sort();
+
+        for score in keys {
+            let hits = self.distr.get(&score).unwrap();
+
+            let row = format!("{:2} -> {:15} {}\n", score, *hits, *hits as f64 / self.n_hits as f64);
+            if let Err(e) = buf_writer.write_all(row.as_bytes()) {
+                return Err(format!("Error while writing to file {}: {}", path_name, e));
+            }
+        }
+        if let Err(e) = buf_writer.flush() {
+            return Err(format!("Error while writing to file {}: {}", path_name, e));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
 pub enum HandType {
     Ones,
     Twos,
@@ -208,7 +374,7 @@ impl HandType {
             HandType::Yatzy => String::from("yatzy"),
         }
     }
-    fn id(&self) -> usize {
+    pub fn id(&self) -> usize {
         match self {
             HandType::Ones => 0,
             HandType::Twos => 1,
@@ -266,72 +432,66 @@ impl HandType {
             HandType::Yatzy => 5,
         }
     }
-    fn score(&self, dices: Vec<u8>) -> f64 {
+    pub fn score(&self, values: &Vec<u8>) -> f64 {
         match self {
             Self::Ones=> {
-                let score = dices
+                let score = values
                     .into_iter()
-                    .filter(|x| *x == 1)
-                    .collect::<Vec<u8>>()
-                    .len()
+                    .filter(|&&x| x == 1)
+                    .count()
                     * 1;
 
                 score as f64
             },
             Self::Twos=> {
-                let score = dices
+                let score = values
                     .into_iter()
-                    .filter(|x| *x == 2)
-                    .collect::<Vec<u8>>()
-                    .len()
+                    .filter(|&&x| x == 2)
+                    .count()
                     * 2;
 
                 score as f64
             },
             Self::Threes=> {
-                let score = dices
+                let score = values
                     .into_iter()
-                    .filter(|x| *x == 3)
-                    .collect::<Vec<u8>>()
-                    .len()
+                    .filter(|&&x| x == 3)
+                    .count()
                     * 3;
 
                 score as f64
             },
             Self::Fours=> {
-                let score = dices
+                let score = values
                     .into_iter()
-                    .filter(|x| *x == 4)
-                    .collect::<Vec<u8>>()
-                    .len()
+                    .filter(|&&x| x == 4)
+                    .count()
                     * 4;
 
                 score as f64
             },
             Self::Fives=> {
-                let score = dices
+                let score = values
                     .into_iter()
-                    .filter(|x| *x == 5)
-                    .collect::<Vec<u8>>()
-                    .len()
+                    .filter(|&&x| x == 5)
+                    .count()
                     * 5;
 
                 score as f64
             },
             Self::Sixes=> {
-                let score = dices
+                let score = values
                     .into_iter()
-                    .filter(|x| *x == 6)
-                    .collect::<Vec<u8>>()
-                    .len()
+                    .filter(|&&x| x == 6)
+                    .count()
                     * 6;
 
                 score as f64
             },
             Self::OnePair=> {
                 let mut groups: [u8; 6] = [0; 6];
-                for dice in dices {
-                    groups[dice as usize - 1] += 1;
+                for dice in values {
+                    groups[*dice as usize - 1] += 1;
                 }
 
                 let mut pair: u8 = 0;
@@ -346,8 +506,8 @@ impl HandType {
             },
             Self::TwoPairs=> {
                 let mut groups: [u8; 6] = [0; 6];
-                for dice in dices {
-                    groups[dice as usize - 1] += 1;
+                for dice in values {
+                    groups[*dice as usize - 1] += 1;
                 }
 
                 let mut pairs: [u8; 2] = [0; 2];
@@ -372,8 +532,8 @@ impl HandType {
             },
             Self::ThreeOfAKind=> {
                 let mut groups: [u8; 6] = [0; 6];
-                for dice in dices {
-                    groups[dice as usize - 1] += 1;
+                for dice in values {
+                    groups[*dice as usize - 1] += 1;
                 }
 
                 let mut triple: u8 = 0;
@@ -388,8 +548,8 @@ impl HandType {
             },
             Self::FourOfAKind=> {
                 let mut groups: [u8; 6] = [0; 6];
-                for dice in dices {
-                    groups[dice as usize - 1] += 1;
+                for dice in values {
+                    groups[*dice as usize - 1] += 1;
                 }
 
                 let mut quad: u8 = 0;
@@ -403,7 +563,7 @@ impl HandType {
                 (quad * 4) as f64
             },
             Self::SmallStraight=> {
-                let score: f64 = match dices.as_slice() {
+                let score: f64 = match values.as_slice() {
                     [1, 2, 3, 4, 5] => 15.0,
                     _ => 0.0,
                 };
@@ -411,7 +571,7 @@ impl HandType {
                 score
             },
             Self::LargeStraight=> {
-                let score: f64 = match dices.as_slice() {
+                let score: f64 = match values.as_slice() {
                     [2, 3, 4, 5, 6] => 20.0,
                     _ => 0.0,
                 };
@@ -420,8 +580,8 @@ impl HandType {
             },
             Self::FullHouse=> {
                 let mut groups: [u8; 6] = [0; 6];
-                for dice in dices {
-                    groups[dice as usize - 1] += 1;
+                for dice in values {
+                    groups[*dice as usize - 1] += 1;
                 }
 
                 let mut triple: u8 = 0;
@@ -446,14 +606,14 @@ impl HandType {
                 res as f64
             },
             Self::Chance=> {
-                let score: u8 = dices.iter().sum();
+                let score: u8 = values.iter().sum();
 
                 score as f64
             },
             Self::Yatzy=> {
                 let mut groups: [u8; 6] = [0; 6];
-                for dice in dices {
-                    groups[dice as usize - 1] += 1;
+                for dice in values {
+                    groups[*dice as usize - 1] += 1;
                 }
 
                 for dice in (1..7).rev() {

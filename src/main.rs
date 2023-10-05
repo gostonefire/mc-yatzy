@@ -1,16 +1,21 @@
 mod dices;
-mod game_box;
-mod game_worker;
 mod hand_worker;
 mod score_box;
 mod utils;
 mod play_worker;
+mod distr_worker;
+mod game_worker;
 
-use crate::game_worker::{learn_game, load_game, load_mcscore};
 use crate::hand_worker::load_hands;
 use clap::{Parser, Subcommand};
 use hand_worker::learn_hands;
+use crate::distr_worker::{learn_hand_distributions, load_hand_distributions};
+use crate::game_worker::mc_play;
 use crate::play_worker::play_with_own_dices;
+use crate::utils::check_path_create_folder;
+
+static EXPORT_DIR: &str = "export";
+static DEBUG_DIR: &str = "debug";
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -35,13 +40,17 @@ enum Commands {
         #[arg(short, value_name="HAND (zero based)")]
         rule: Option<usize>,
 
-        /// Learn the game model
+        /// Learn distribution for yatzy hands
+        #[arg(short, value_name="LAPS")]
+        distr: Option<i64>,
+
+        /// Learn game strategies
         #[arg(short, value_name="LAPS")]
         game: Option<i64>,
 
-        /// Export debug output from yatzy hands learning
+        /// Export full output from yatzy hands learning
         #[arg(short)]
-        debug: bool,
+        full: bool,
     },
 
     /// Export models to readable format
@@ -50,40 +59,33 @@ enum Commands {
         #[arg(short, long)]
         scores: bool,
 
-        /// Export the game model
+        /// Export distribution for yatzy hands
         #[arg(short, long)]
-        game: bool,
-
-        /// Export the mc score model
-        #[arg(short, long)]
-        mcscore: bool,
-    },
-
-    /// Print some statistics
-    Stats {
-        #[arg(short, long)]
-        mcscore: bool,
+        distr: bool,
     },
 
     /// Run game of yatzy
-    Play,
+    Play {
+        /// Human (own dices) vs MC
+        #[arg(short, long)]
+        interactive: bool,
+    },
 }
 
 fn main() -> Result<(), String> {
     let args = Cli::parse();
 
+    check_path_create_folder(&args.path, None)?;
+
     match args.command {
-        Commands::Learn {scores, rule, game, debug} => {
-            learn_models(&args.path, scores, rule, game, debug)?
+        Commands::Learn {scores, rule, distr, game, full} => {
+            learn_models(&args.path, scores, rule, distr, game, full)?
         },
-        Commands::Export {scores, game, mcscore} => {
-            export_models(&args.path, scores, game, mcscore)?;
+        Commands::Export {scores, distr} => {
+            export_models(&args.path, scores, distr)?;
         },
-        Commands::Stats {mcscore} => {
-            print_models_statistics(&args.path, mcscore)?
-        },
-        Commands::Play {} => {
-            play_game(&args.path)?;
+        Commands::Play {interactive} => {
+            play_game(&args.path, interactive)?;
         },
     }
 
@@ -91,56 +93,54 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 
-fn learn_models(path: &str, scores: Option<i64>, rule: Option<usize>, game: Option<i64>, debug: bool) -> Result<(), String> {
+fn learn_models(path: &str, scores: Option<i64>, rule: Option<usize>, distr: Option<i64>, game: Option<i64>, full: bool) -> Result<(), String> {
+    if full {
+        check_path_create_folder(path, Some(DEBUG_DIR))?;
+    }
+
     if let Some(laps) = scores {
         println!("Start learning rules");
-        learn_hands(laps, path, rule, debug)?;
+        learn_hands(laps, path, rule, full)?;
+    }
+
+    if let Some(laps) = distr {
+        println!("Start learning hand distributions");
+        learn_hand_distributions(laps, path, rule)?;
     }
 
     if let Some(laps) = game {
-        println!("Start learning game");
-        learn_game(laps, path)?;
+        println!("Start learning game strategies");
+        mc_play(path, laps)?;
     }
 
     Ok(())
 }
 
-fn print_models_statistics(path: &str, mcgame: bool) -> Result<(), String> {
-    if mcgame {
-        println!("Start loading mc score file");
-        let mc_score = load_mcscore(path)?;
-        println!("...calculating statistics");
-        println!("{}\n", mc_score.statistics()?);
-    }
+fn export_models(path: &str, scores: bool, distr: bool) -> Result<(), String> {
+    check_path_create_folder(path, Some(EXPORT_DIR))?;
 
-    Ok(())
-}
-
-fn export_models(path: &str, scores: bool, game: bool, mcscore: bool) -> Result<(), String> {
     if scores {
         println!("Start loading rules");
-        let hand_rules = load_hands(path)?;
+        let hand_rules = load_hands(path, false)?;
         println!("Start exporting rules");
         hand_rules.iter().for_each(|h| h.export_optimal_holds(path).unwrap());
     }
 
-    if game {
-        println!("Start loading game");
-        let game_rules = load_game(path)?;
-        println!("Start exporting game");
-        game_rules.export_optimal_games(path)?;
-    }
-
-    if mcscore {
-        println!("Start loading mc score file");
-        let mc_score = load_mcscore(path)?;
-        println!("Start exporting scores");
-        mc_score.export_score(path)?;
+    if distr {
+        println!("Start loading distributions");
+        let hand_distr = load_hand_distributions(path, false)?;
+        println!("Start exporting rules");
+        hand_distr.iter().for_each(|h| h.export_distribution(path).unwrap());
     }
 
     Ok(())
 }
 
-fn play_game(path: &str) -> Result<(), String> {
-    play_with_own_dices(path)
+fn play_game(path: &str, interactive: bool) -> Result<(), String> {
+
+    if interactive {
+        play_with_own_dices(path)?;
+    }
+
+    Ok(())
 }
