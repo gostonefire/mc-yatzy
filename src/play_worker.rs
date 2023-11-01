@@ -2,29 +2,30 @@ use std::collections::HashMap;
 use std::io::stdin;
 use std::str::FromStr;
 use colored::{ColoredString, Colorize};
-use rust_tree_map::multi_file_tree_map::MultiFileTreeMap;
-use rust_tree_map::OpenMode::MustExist;
 use crate::dices::{Dices, Throw};
-use crate::distr_worker::load_hand_distributions;
-use crate::game_worker::{best_available_game_hand_from_tree, hand_score_to_key};
+use crate::weight_worker::{best_available_game_hand, load_weights};
 use crate::hand_worker::load_hands;
-use crate::score_box::rules::{best_available_hand, Hand, HandDistribution};
+use crate::score_box::rules::{best_available_hand, Hand};
 use crate::utils::{base10_to_base2, base10_to_base7, base7_to_base10, initcap};
 
-type SplitterType = fn(u16) -> u8;
-
-pub fn play_with_own_dices(path: &str) -> Result<(), String> {
+pub fn play_with_own_dices(path: &str, bonus: u32) -> Result<(), String> {
     let mut human_available_hands: u16 = 32767;
     let mut mc_available_hands: u16 = 32767;
     let mut human_scores: HashMap<u8, u16> = HashMap::new();
     let mut mc_scores: HashMap<u8, u16> = HashMap::new();
 
-    let splitter: SplitterType = |k| (k >> 9) as u8;
-    let mut tree = MultiFileTreeMap::new(path, 120, MustExist, splitter)
-        .map_err(|e| e.to_string())?;
+    let mut dices = Dices::new();
     let hands = load_hands(path, true)?;
-    let distr = load_hand_distributions(path, true)?;
-    let mut used_hands: Vec<u16> = Vec::new();
+    let weights_vec = load_weights(path, Some(bonus))?;
+    let weights = if let Some((_, w)) = weights_vec {
+        if w.len() > 0 {
+            w[0].weights
+        } else {
+            return Err(String::from("Error, no weights in weights file"));
+        }
+    } else {
+        return Err(String::from("Error, no weights file available"));
+    };
 
     let hand_names = hands
         .iter()
@@ -38,16 +39,15 @@ pub fn play_with_own_dices(path: &str) -> Result<(), String> {
     print_score_card(&human_scores, &mc_scores, &hand_names, (0, 0));
     println!("Input dices without separators, e.g. 13234");
     while human_available_hands > 0 {
-        let (dices, hand) = query_human_input(human_available_hands);
-        let score = hands[hand as usize].score(dices);
+        let (thrown, hand) = query_human_input(human_available_hands);
+        let score = hands[hand as usize].score(&thrown);
         human_scores.insert(hand, score as u16);
         human_available_hands -= 2u16.pow(hand as u32);
 
-        let (dices, mc_hand) = query_mc_input(mc_available_hands, &used_hands, &hands, &distr, &mut tree, 21.5)?;
-        let score = hands[mc_hand as usize].score(dices);
+        let (dices, mc_hand) = query_mc_input(&mut dices, mc_available_hands, &hands, weights)?;
+        let score = hands[mc_hand as usize].score(&dices);
         mc_scores.insert(mc_hand, score as u16);
         mc_available_hands -= 2u16.pow(mc_hand as u32);
-        used_hands.push(hand_score_to_key(mc_hand as u16, score as u16));
 
         print_score_card(&human_scores, &mc_scores, &hand_names, (hand, mc_hand));
     }
@@ -84,9 +84,15 @@ fn query_human_input(available_hands: u16) -> (Vec<u8>, u8) {
     (t_vec, hand)
 }
 
-fn query_mc_input(available_hands: u16, used_hands: &Vec<u16>, hands: &Vec<Box<Hand>>, distr: &Vec<Box<HandDistribution>>, tree: &mut MultiFileTreeMap<SplitterType>, bonus_extra: f64) -> Result<(Vec<u8>, u8), String> {
-    let mut dices = Dices::new();
+fn query_mc_input(dices: &mut Dices, available_hands: u16, hands: &Vec<Box<Hand>>, weights: [f32;15]) -> Result<(Vec<u8>, u8), String> {
 
+    let t3 = throw_hand(dices, available_hands, hands)?;
+    let (h3, _) = best_available_game_hand(&t3, available_hands, hands, weights)?;
+
+    Ok((t3, h3))
+}
+
+pub fn throw_hand(dices: &mut Dices, available_hands: u16, hands: &Vec<Box<Hand>>) -> Result<Vec<u8>, String> {
     let t1_code = base7_to_base10(&dices.throw_and_hold(None));
     let h1 = best_available_hand(Throw::First, t1_code, available_hands, &hands)?;
     let (_, s1_code, _) = hands[h1].optimal_holds(Throw::First)?.get(&t1_code).unwrap();
@@ -95,10 +101,9 @@ fn query_mc_input(available_hands: u16, used_hands: &Vec<u16>, hands: &Vec<Box<H
     let h2 = best_available_hand(Throw::Second, t2_code, available_hands, &hands)?;
     let (_, s2_code, _) = hands[h2].optimal_holds(Throw::Second)?.get(&t2_code).unwrap();
 
-    let t3_code = base7_to_base10(&dices.throw_and_hold(Some(base10_to_base7(*s2_code))));
-    let h3 = best_available_game_hand_from_tree(t3_code, available_hands, used_hands, tree, &hands, distr, bonus_extra)?;
+    let t3 = dices.throw_and_hold(Some(base10_to_base7(*s2_code)));
 
-    Ok((base10_to_base7(t3_code), h3 as u8))
+    Ok(t3)
 }
 
 fn check_hold(dices: &Vec<u8>, hold: &Vec<u8>) -> bool {

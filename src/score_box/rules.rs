@@ -2,8 +2,7 @@ use crate::score_box::{OptimalHolds, Throw};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
-use rand::distributions::{Distribution, WeightedIndex};
-use rand::rngs::ThreadRng;
+use rand::distributions::WeightedIndex;
 use crate::dices::Throw::{First, Second};
 use crate::EXPORT_DIR;
 use crate::utils::{base10_to_base2, base10_to_base7, records_in_file, write_records_header};
@@ -54,8 +53,8 @@ impl Hand {
         }
     }
 
-    pub fn score(&self, dices: Vec<u8>) -> f64 {
-        self.hand.score(&dices)
+    pub fn score(&self, dices: &Vec<u8>) -> f32 {
+        self.hand.score(dices)
     }
 
     pub fn load_optimal_holds(&mut self, path: &str) -> Result<(), String> {
@@ -178,7 +177,6 @@ pub struct HandDistribution {
     distr: HashMap<u8, u64>,
     n_hits: u64,
     mean: f64,
-    rng: ThreadRng,
     weights: (Vec<u8>, Vec<u64>),
     weighted_index: WeightedIndex<u64>,
     hand: HandType,
@@ -190,7 +188,6 @@ impl HandDistribution {
             distr: HashMap::new(),
             n_hits: 0,
             mean: 0.0,
-            rng: rand::thread_rng(),
             weights: (Vec::new(), Vec::new()),
             weighted_index: WeightedIndex::new([1]).unwrap(),
             hand,
@@ -211,22 +208,6 @@ impl HandDistribution {
             }
         }
         self.n_hits += 1;
-    }
-
-    pub fn len(&self) -> u32 {
-        self.distr.len() as u32
-    }
-
-    pub fn mean_score(&self, extras: Option<f64>) -> Result<f64, String> {
-        if self.n_hits > 0 {
-            Ok(self.mean + extras.unwrap_or_default())
-        } else {
-            Err("Error, no data available for calculating mean score".to_string())
-        }
-    }
-
-    pub fn sample_from_distribution(&mut self) -> u8 {
-        self.weights.0[self.weighted_index.sample(&mut self.rng)]
     }
 
     fn update_weighted_index(&mut self) {
@@ -432,7 +413,7 @@ impl HandType {
             HandType::Yatzy => 5,
         }
     }
-    pub fn score(&self, values: &Vec<u8>) -> f64 {
+    pub fn score(&self, values: &Vec<u8>) -> f32 {
         match self {
             Self::Ones=> {
                 let score = values
@@ -441,7 +422,7 @@ impl HandType {
                     .count()
                     * 1;
 
-                score as f64
+                score as f32
             },
             Self::Twos=> {
                 let score = values
@@ -450,7 +431,7 @@ impl HandType {
                     .count()
                     * 2;
 
-                score as f64
+                score as f32
             },
             Self::Threes=> {
                 let score = values
@@ -459,7 +440,7 @@ impl HandType {
                     .count()
                     * 3;
 
-                score as f64
+                score as f32
             },
             Self::Fours=> {
                 let score = values
@@ -468,7 +449,7 @@ impl HandType {
                     .count()
                     * 4;
 
-                score as f64
+                score as f32
             },
             Self::Fives=> {
                 let score = values
@@ -477,7 +458,7 @@ impl HandType {
                     .count()
                     * 5;
 
-                score as f64
+                score as f32
             },
             Self::Sixes=> {
                 let score = values
@@ -486,7 +467,7 @@ impl HandType {
                     .count()
                     * 6;
 
-                score as f64
+                score as f32
             },
             Self::OnePair=> {
                 let mut groups: [u8; 6] = [0; 6];
@@ -502,7 +483,7 @@ impl HandType {
                     }
                 }
 
-                (pair * 2) as f64
+                (pair * 2) as f32
             },
             Self::TwoPairs=> {
                 let mut groups: [u8; 6] = [0; 6];
@@ -528,7 +509,7 @@ impl HandType {
                     pairs[0] * 2 + pairs[1] * 2
                 };
 
-                res as f64
+                res as f32
             },
             Self::ThreeOfAKind=> {
                 let mut groups: [u8; 6] = [0; 6];
@@ -544,7 +525,7 @@ impl HandType {
                     }
                 }
 
-                (triple * 3) as f64
+                (triple * 3) as f32
             },
             Self::FourOfAKind=> {
                 let mut groups: [u8; 6] = [0; 6];
@@ -560,10 +541,10 @@ impl HandType {
                     }
                 }
 
-                (quad * 4) as f64
+                (quad * 4) as f32
             },
             Self::SmallStraight=> {
-                let score: f64 = match values.as_slice() {
+                let score: f32 = match values.as_slice() {
                     [1, 2, 3, 4, 5] => 15.0,
                     _ => 0.0,
                 };
@@ -571,7 +552,7 @@ impl HandType {
                 score
             },
             Self::LargeStraight=> {
-                let score: f64 = match values.as_slice() {
+                let score: f32 = match values.as_slice() {
                     [2, 3, 4, 5, 6] => 20.0,
                     _ => 0.0,
                 };
@@ -603,12 +584,12 @@ impl HandType {
                     0
                 };
 
-                res as f64
+                res as f32
             },
             Self::Chance=> {
                 let score: u8 = values.iter().sum();
 
-                score as f64
+                score as f32
             },
             Self::Yatzy=> {
                 let mut groups: [u8; 6] = [0; 6];

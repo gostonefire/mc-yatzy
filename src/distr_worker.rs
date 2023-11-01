@@ -63,9 +63,9 @@ fn play_hand(dices: &mut Dices, hand: &Hand) -> u8 {
     let t2_code = base7_to_base10(&dices.throw_and_hold(Some(base10_to_base7(*s1_code))));
     let (_, s2_code, _) = hand.optimal_holds(Throw::Second).unwrap().get(&t2_code).unwrap();
 
-    let t3_code = base7_to_base10(&dices.throw_and_hold(Some(base10_to_base7(*s2_code))));
+    let t3 = &dices.throw_and_hold(Some(base10_to_base7(*s2_code)));
 
-    hand.score(base10_to_base7(t3_code)) as u8
+    hand.score(t3) as u8
 }
 
 pub fn load_hand_distributions(path: &str, fail: bool) -> Result<Vec<Box<HandDistribution>>, String> {

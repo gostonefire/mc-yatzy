@@ -80,6 +80,22 @@ pub fn base7_to_base10(b7: &Vec<u8>) -> u16 {
     res
 }
 
+pub fn base3_to_base10(b3: &Vec<u8>) -> u32 {
+    let length = b3.len() as u32;
+    let mut res: u32 = 0;
+
+    if length > 0 {
+        for (i, v) in b3
+            .iter()
+            .enumerate()
+            .map(|x| (length - x.0 as u32 - 1, *x.1 as u32))
+        {
+            res += u32::pow(3, i) * v;
+        }
+    }
+    res
+}
+
 pub fn base10_to_base7(b10: u16) -> Vec<u8> {
     let mut d = b10 / 7;
     let mut r = b10 % 7;
@@ -131,4 +147,17 @@ pub fn initcap(data: String) -> String {
         }
     }
     result
+}
+
+pub fn factor(input :u32) -> Vec<u32>{
+    let count = 2;
+    let mut vector: Vec<u32> = Vec::new();
+
+    for count in count..input {
+        if input % count == 0 {
+            vector.push(count);
+        }
+    }
+
+    return vector;
 }

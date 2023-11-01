@@ -1,6 +1,6 @@
 [package]
 name = "yatzy"
-version = "0.2.3"
+version = "0.4.14"
 edition = "2021"
 authors = ["Peter Steneld"]
 description = "Utility to statistically learn best actions in the game of Yatzy"
@@ -9,9 +9,8 @@ description = "Utility to statistically learn best actions in the game of Yatzy"
 
 [dependencies]
 rand = "0.8"
-rayon = "1.8.0"
+rayon = "1.8"
 clap = { version = "4", features = ["derive"] }
-num-format = "0.4.4"
+num-format = "0.4"
 colored = "2"
-rust-tree-map = { git = "https://github.com/gostonefire/rust-tree-map.git", version = "0" }
-chrono = "0.4.31"
+chrono = "0.4"

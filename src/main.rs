@@ -4,13 +4,13 @@ mod score_box;
 mod utils;
 mod play_worker;
 mod distr_worker;
-mod game_worker;
+mod weight_worker;
 
 use crate::hand_worker::load_hands;
 use clap::{Parser, Subcommand};
 use hand_worker::learn_hands;
 use crate::distr_worker::{learn_hand_distributions, load_hand_distributions};
-use crate::game_worker::mc_play;
+use crate::weight_worker::{export_weights, load_weights, strategy_learn};
 use crate::play_worker::play_with_own_dices;
 use crate::utils::check_path_create_folder;
 
@@ -44,13 +44,17 @@ enum Commands {
         #[arg(short, value_name="LAPS")]
         distr: Option<i64>,
 
-        /// Learn game strategies
-        #[arg(short, value_name="LAPS")]
-        game: Option<i64>,
+        /// Learn game strategies, supply both laps and sub-laps
+        #[arg(short, value_name="LAPS", num_args(2))]
+        game: Option<Vec<i64>>,
 
         /// Export full output from yatzy hands learning
         #[arg(short)]
         full: bool,
+
+        /// Bonus to use in game strategy learning
+        #[arg(short)]
+        bonus: Option<u32>,
     },
 
     /// Export models to readable format
@@ -62,13 +66,17 @@ enum Commands {
         /// Export distribution for yatzy hands
         #[arg(short, long)]
         distr: bool,
+
+        /// Export weights for yatzy strategy
+        #[arg(short, long, value_name="BONUS")]
+        weights: Option<u32>,
     },
 
     /// Run game of yatzy
     Play {
         /// Human (own dices) vs MC
-        #[arg(short, long)]
-        interactive: bool,
+        #[arg(short, long, value_name="BONUS")]
+        interactive: Option<u32>,
     },
 }
 
@@ -78,11 +86,11 @@ fn main() -> Result<(), String> {
     check_path_create_folder(&args.path, None)?;
 
     match args.command {
-        Commands::Learn {scores, rule, distr, game, full} => {
-            learn_models(&args.path, scores, rule, distr, game, full)?
+        Commands::Learn {scores, rule, distr, game,full, bonus} => {
+            learn_models(&args.path, scores, rule, distr, game, full, bonus)?
         },
-        Commands::Export {scores, distr} => {
-            export_models(&args.path, scores, distr)?;
+        Commands::Export {scores, distr, weights} => {
+            export_models(&args.path, scores, distr, weights)?;
         },
         Commands::Play {interactive} => {
             play_game(&args.path, interactive)?;
@@ -93,7 +101,7 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 
-fn learn_models(path: &str, scores: Option<i64>, rule: Option<usize>, distr: Option<i64>, game: Option<i64>, full: bool) -> Result<(), String> {
+fn learn_models(path: &str, scores: Option<i64>, rule: Option<usize>, distr: Option<i64>, game: Option<Vec<i64>>, full: bool, bonus: Option<u32>) -> Result<(), String> {
     if full {
         check_path_create_folder(path, Some(DEBUG_DIR))?;
     }
@@ -110,13 +118,13 @@ fn learn_models(path: &str, scores: Option<i64>, rule: Option<usize>, distr: Opt
 
     if let Some(laps) = game {
         println!("Start learning game strategies");
-        mc_play(path, laps)?;
+        strategy_learn(path, laps, bonus)?;
     }
 
     Ok(())
 }
 
-fn export_models(path: &str, scores: bool, distr: bool) -> Result<(), String> {
+fn export_models(path: &str, scores: bool, distr: bool, weights: Option<u32>) -> Result<(), String> {
     check_path_create_folder(path, Some(EXPORT_DIR))?;
 
     if scores {
@@ -133,13 +141,23 @@ fn export_models(path: &str, scores: bool, distr: bool) -> Result<(), String> {
         hand_distr.iter().for_each(|h| h.export_distribution(path).unwrap());
     }
 
+    if let Some(bonus) = weights {
+        println!("Start loading weights");
+        if let Some((generation, weights)) = load_weights(path, Some(bonus))? {
+            println!("Start exporting weights");
+            export_weights(path, Some(bonus), generation, &weights)?;
+        } else {
+            println!("No weights found in weights file");
+        };
+    }
+
     Ok(())
 }
 
-fn play_game(path: &str, interactive: bool) -> Result<(), String> {
+fn play_game(path: &str, interactive: Option<u32>) -> Result<(), String> {
 
-    if interactive {
-        play_with_own_dices(path)?;
+    if let Some(bonus) = interactive {
+        play_with_own_dices(path, bonus)?;
     }
 
     Ok(())

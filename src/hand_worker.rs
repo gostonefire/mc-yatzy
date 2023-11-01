@@ -50,10 +50,10 @@ fn run(hand_type: HandType, laps: i64, path: &str, learn: [&LearnMode;15]) {
 
     for _ in 0..laps {
         let (t1_code, s1_code, s1_len, t2_code, s2_code, s2_len, throw3) = dices.play_round();
-        let score = hand.score(throw3);
+        let score = hand.score(&throw3);
 
-        mc.update_scores(First, t1_code, s1_code, s1_len, score);
-        mc.update_scores(Second, t2_code, s2_code, s2_len, score);
+        mc.update_scores(First, t1_code, s1_code, s1_len, score as f64);
+        mc.update_scores(Second, t2_code, s2_code, s2_len, score as f64);
     }
 
     let min_holds = hand.min_holds();
